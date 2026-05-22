@@ -6,11 +6,33 @@ const app = require('../server');
 jest.setTimeout(60000); // 60 seconds
 
 let mongoServer;
+let token;
+let secondUserToken;
 
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
+
+  // Register a test user
+  const res = await request(app)
+    .post('/api/auth/register')
+    .send({
+      name: 'Test User',
+      email: 'test@example.com',
+      password: 'password123'
+    });
+  token = res.body.token;
+
+  // Register a second test user to verify data isolation
+  const res2 = await request(app)
+    .post('/api/auth/register')
+    .send({
+      name: 'Second User',
+      email: 'second@example.com',
+      password: 'password123'
+    });
+  secondUserToken = res2.body.token;
 });
 
 afterAll(async () => {
@@ -18,12 +40,61 @@ afterAll(async () => {
   await mongoServer.stop();
 });
 
+describe('Authentication API', () => {
+  it('should not register user with short password', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Short Pass',
+        email: 'short@example.com',
+        password: '123'
+      });
+    expect(res.statusCode).toEqual(400);
+  });
+
+  it('should login test user and return JWT token', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'test@example.com',
+        password: 'password123'
+      });
+    expect(res.statusCode).toEqual(200);
+    expect(res.body).toHaveProperty('token');
+  });
+
+  it('should return user info for me route when authenticated', async () => {
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.statusCode).toEqual(200);
+    expect(res.body.email).toBe('test@example.com');
+  });
+
+  it('should fail me route when not authenticated', async () => {
+    const res = await request(app).get('/api/auth/me');
+    expect(res.statusCode).toEqual(401);
+  });
+});
+
 describe('Products API', () => {
   let productId;
 
-  it('should create a new product', async () => {
+  it('should fail to create product if not authenticated', async () => {
     const res = await request(app)
       .post('/api/products')
+      .send({
+        name: 'Unauthorized Product',
+        price: 100,
+        gst: 18
+      });
+    expect(res.statusCode).toEqual(401);
+  });
+
+  it('should create a new product when authenticated', async () => {
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', `Bearer ${token}`)
       .send({
         name: 'Test Product',
         price: 100,
@@ -35,15 +106,26 @@ describe('Products API', () => {
     productId = res.body._id;
   });
 
-  it('should get all products', async () => {
-    const res = await request(app).get('/api/products');
+  it('should get products for the authenticated user only', async () => {
+    // Check with first user (should find it)
+    const res = await request(app)
+      .get('/api/products')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.statusCode).toEqual(200);
     expect(res.body.length).toBeGreaterThan(0);
+
+    // Check with second user (should NOT find it - empty array)
+    const resSecond = await request(app)
+      .get('/api/products')
+      .set('Authorization', `Bearer ${secondUserToken}`);
+    expect(resSecond.statusCode).toEqual(200);
+    expect(resSecond.body.length).toBe(0);
   });
 
   it('should update a product and handle 0 values correctly', async () => {
     const res = await request(app)
       .put(`/api/products/${productId}`)
+      .set('Authorization', `Bearer ${token}`)
       .send({
         price: 0,
         gst: 0
@@ -53,8 +135,20 @@ describe('Products API', () => {
     expect(res.body.gst).toBe(0);
   });
 
+  it('should prevent updating other users products', async () => {
+    const res = await request(app)
+      .put(`/api/products/${productId}`)
+      .set('Authorization', `Bearer ${secondUserToken}`)
+      .send({
+        name: 'Hacked Product'
+      });
+    expect(res.statusCode).toEqual(404);
+  });
+
   it('should delete a product', async () => {
-    const res = await request(app).delete(`/api/products/${productId}`);
+    const res = await request(app)
+      .delete(`/api/products/${productId}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.statusCode).toEqual(200);
   });
 });
@@ -65,6 +159,7 @@ describe('Customers API', () => {
   it('should create a new customer', async () => {
     const res = await request(app)
       .post('/api/customers')
+      .set('Authorization', `Bearer ${token}`)
       .send({
         name: 'Test Customer',
         phone: '1234567890'
@@ -75,22 +170,33 @@ describe('Customers API', () => {
     customerId = res.body._id;
   });
 
-  it('should get all customers', async () => {
-    const res = await request(app).get('/api/customers');
+  it('should get all customers for authenticated user', async () => {
+    const res = await request(app)
+      .get('/api/customers')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.statusCode).toEqual(200);
     expect(res.body.length).toBeGreaterThan(0);
+
+    const resSecond = await request(app)
+      .get('/api/customers')
+      .set('Authorization', `Bearer ${secondUserToken}`);
+    expect(resSecond.statusCode).toEqual(200);
+    expect(resSecond.body.length).toBe(0);
   });
 
   it('should update a customer', async () => {
     const res = await request(app)
       .put(`/api/customers/${customerId}`)
+      .set('Authorization', `Bearer ${token}`)
       .send({ phone: '0987654321' });
     expect(res.statusCode).toEqual(200);
     expect(res.body.phone).toBe('0987654321');
   });
 
   it('should delete a customer', async () => {
-    const res = await request(app).delete(`/api/customers/${customerId}`);
+    const res = await request(app)
+      .delete(`/api/customers/${customerId}`)
+      .set('Authorization', `Bearer ${token}`);
     expect(res.statusCode).toEqual(200);
   });
 });
@@ -99,6 +205,7 @@ describe('Bills API', () => {
   it('should return 400 if items array is not valid', async () => {
     const res = await request(app)
       .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
       .send({
         customerName: 'Test Customer',
         items: { productName: 'invalid' } // not an array
@@ -110,6 +217,7 @@ describe('Bills API', () => {
   it('should return 400 if item has negative price or quantity', async () => {
     const res = await request(app)
       .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
       .send({
         customerName: 'Test Customer',
         items: [
@@ -122,6 +230,7 @@ describe('Bills API', () => {
   it('should create a bill and calculate total accurately', async () => {
     const res = await request(app)
       .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
       .send({
         customerName: 'Test Customer',
         items: [
@@ -134,30 +243,47 @@ describe('Bills API', () => {
     expect(res.body.total).toBe(288.5); // 236 + 52.5 = 288.5
   });
 
-  it('should get all bills', async () => {
-    const res = await request(app).get('/api/bills');
+  it('should get all bills for the authenticated user only', async () => {
+    const res = await request(app)
+      .get('/api/bills')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.statusCode).toEqual(200);
     expect(res.body.length).toBeGreaterThan(0);
+
+    const resSecond = await request(app)
+      .get('/api/bills')
+      .set('Authorization', `Bearer ${secondUserToken}`);
+    expect(resSecond.statusCode).toEqual(200);
+    expect(resSecond.body.length).toBe(0);
   });
 });
 
 describe('Real User Flow', () => {
   it('should create a product, customer, and then a bill', async () => {
-    const prodRes = await request(app).post('/api/products').send({ name: 'Flow Product', price: 100, gst: 10 });
-    const custRes = await request(app).post('/api/customers').send({ name: 'Flow Customer', phone: '1112223334' });
+    const prodRes = await request(app)
+      .post('/api/products')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Flow Product', price: 100, gst: 10 });
+    const custRes = await request(app)
+      .post('/api/customers')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Flow Customer', phone: '1112223334' });
     
     expect(prodRes.statusCode).toBe(201);
     expect(custRes.statusCode).toBe(201);
 
-    const billRes = await request(app).post('/api/bills').send({
-      customerName: custRes.body.name,
-      items: [{
-        productName: prodRes.body.name,
-        price: prodRes.body.price,
-        quantity: 3,
-        gst: prodRes.body.gst
-      }]
-    });
+    const billRes = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: custRes.body.name,
+        items: [{
+          productName: prodRes.body.name,
+          price: prodRes.body.price,
+          quantity: 3,
+          gst: prodRes.body.gst
+        }]
+      });
 
     expect(billRes.statusCode).toBe(201);
     expect(billRes.body.total).toBe(330); // (100 * 3) + 10% = 330

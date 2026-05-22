@@ -2,10 +2,10 @@ const Customer = require('../models/Customer');
 
 // @desc    Get all customers
 // @route   GET /api/customers
-// @access  Public
+// @access  Private
 const getCustomers = async (req, res) => {
   try {
-    const customers = await Customer.find();
+    const customers = await Customer.find({ userId: req.user._id });
     res.json(customers);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -14,12 +14,13 @@ const getCustomers = async (req, res) => {
 
 // @desc    Create a customer
 // @route   POST /api/customers
-// @access  Public
+// @access  Private
 const createCustomer = async (req, res) => {
   const { name, phone } = req.body;
 
   try {
     const customer = new Customer({
+      userId: req.user._id,
       name,
       phone,
     });
@@ -33,7 +34,7 @@ const createCustomer = async (req, res) => {
 
 // @desc    Update a customer
 // @route   PUT /api/customers/:id
-// @access  Public
+// @access  Private
 const updateCustomer = async (req, res) => {
   const { name, phone } = req.body;
 
@@ -41,7 +42,7 @@ const updateCustomer = async (req, res) => {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(404).json({ message: 'Customer not found' });
     }
-    const customer = await Customer.findById(req.params.id);
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (customer) {
       customer.name = name !== undefined ? name : customer.name;
@@ -59,13 +60,13 @@ const updateCustomer = async (req, res) => {
 
 // @desc    Delete a customer
 // @route   DELETE /api/customers/:id
-// @access  Public
+// @access  Private
 const deleteCustomer = async (req, res) => {
   try {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(404).json({ message: 'Customer not found' });
     }
-    const customer = await Customer.findById(req.params.id);
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (customer) {
       await customer.deleteOne();

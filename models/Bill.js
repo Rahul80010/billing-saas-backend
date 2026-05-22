@@ -23,6 +23,12 @@ const itemSchema = new mongoose.Schema({
 });
 
 const billSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  },
   customerName: {
     type: String,
     required: true,

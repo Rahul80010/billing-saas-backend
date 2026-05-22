@@ -6,6 +6,10 @@ const {
   updateCustomer,
   deleteCustomer,
 } = require('../controllers/customerController');
+const { protect } = require('../middleware/authMiddleware');
+
+// Protect all routes
+router.use(protect);
 
 router.route('/').get(getCustomers).post(createCustomer);
 router.route('/:id').put(updateCustomer).delete(deleteCustomer);

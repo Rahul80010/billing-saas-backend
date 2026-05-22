@@ -2,10 +2,10 @@ const Product = require('../models/Product');
 
 // @desc    Get all products
 // @route   GET /api/products
-// @access  Public
+// @access  Private
 const getProducts = async (req, res) => {
   try {
-    const products = await Product.find();
+    const products = await Product.find({ userId: req.user._id });
     res.json(products);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -14,12 +14,13 @@ const getProducts = async (req, res) => {
 
 // @desc    Create a product
 // @route   POST /api/products
-// @access  Public
+// @access  Private
 const createProduct = async (req, res) => {
   const { name, price, gst } = req.body;
 
   try {
     const product = new Product({
+      userId: req.user._id,
       name,
       price,
       gst,
@@ -34,7 +35,7 @@ const createProduct = async (req, res) => {
 
 // @desc    Update a product
 // @route   PUT /api/products/:id
-// @access  Public
+// @access  Private
 const updateProduct = async (req, res) => {
   const { name, price, gst } = req.body;
 
@@ -42,7 +43,7 @@ const updateProduct = async (req, res) => {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(404).json({ message: 'Product not found' });
     }
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (product) {
       product.name = name !== undefined ? name : product.name;
@@ -61,13 +62,13 @@ const updateProduct = async (req, res) => {
 
 // @desc    Delete a product
 // @route   DELETE /api/products/:id
-// @access  Public
+// @access  Private
 const deleteProduct = async (req, res) => {
   try {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(404).json({ message: 'Product not found' });
     }
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (product) {
       await product.deleteOne();

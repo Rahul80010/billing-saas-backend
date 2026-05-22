@@ -2,10 +2,10 @@ const Bill = require('../models/Bill');
 
 // @desc    Get all bills
 // @route   GET /api/bills
-// @access  Public
+// @access  Private
 const getBills = async (req, res) => {
   try {
-    const bills = await Bill.find().sort({ createdAt: -1 });
+    const bills = await Bill.find({ userId: req.user._id }).sort({ createdAt: -1 });
     res.json(bills);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -14,7 +14,7 @@ const getBills = async (req, res) => {
 
 // @desc    Create a bill
 // @route   POST /api/bills
-// @access  Public
+// @access  Private
 const createBill = async (req, res) => {
   const { customerName, items } = req.body;
 
@@ -52,6 +52,7 @@ const createBill = async (req, res) => {
     }
 
     const bill = new Bill({
+      userId: req.user._id,
       customerName,
       items: processedItems,
       total: Number(total.toFixed(2)),
