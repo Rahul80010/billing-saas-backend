@@ -15,24 +15,43 @@ beforeAll(async () => {
   await mongoose.connect(mongoUri);
 
   // Register a test user
-  const res = await request(app)
+  await request(app)
     .post('/api/auth/register')
     .send({
       name: 'Test User',
       email: 'test@example.com',
+      phone: '1111111111',
       password: 'password123'
     });
-  token = res.body.token;
+
+  const User = mongoose.model('User');
+  const user1 = await User.findOne({ email: 'test@example.com' });
+  const verifyRes1 = await request(app)
+    .post('/api/auth/verify-otp')
+    .send({
+      email: 'test@example.com',
+      otp: user1.otp
+    });
+  token = verifyRes1.body.token;
 
   // Register a second test user to verify data isolation
-  const res2 = await request(app)
+  await request(app)
     .post('/api/auth/register')
     .send({
       name: 'Second User',
       email: 'second@example.com',
+      phone: '2222222222',
       password: 'password123'
     });
-  secondUserToken = res2.body.token;
+
+  const user2 = await User.findOne({ email: 'second@example.com' });
+  const verifyRes2 = await request(app)
+    .post('/api/auth/verify-otp')
+    .send({
+      email: 'second@example.com',
+      otp: user2.otp
+    });
+  secondUserToken = verifyRes2.body.token;
 });
 
 afterAll(async () => {
@@ -47,6 +66,7 @@ describe('Authentication API', () => {
       .send({
         name: 'Short Pass',
         email: 'short@example.com',
+        phone: '3333333333',
         password: '123'
       });
     expect(res.statusCode).toEqual(400);
@@ -57,6 +77,17 @@ describe('Authentication API', () => {
       .post('/api/auth/login')
       .send({
         email: 'test@example.com',
+        password: 'password123'
+      });
+    expect(res.statusCode).toEqual(200);
+    expect(res.body).toHaveProperty('token');
+  });
+
+  it('should login test user with phone number and return JWT token', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({
+        username: '1111111111',
         password: 'password123'
       });
     expect(res.statusCode).toEqual(200);
