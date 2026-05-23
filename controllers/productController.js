@@ -23,7 +23,7 @@ const createProduct = async (req, res) => {
       userId: req.user._id,
       name,
       price,
-      gst,
+      gst: (gst === undefined || gst === null || gst === '') ? 0 : Number(gst),
     });
 
     const createdProduct = await product.save();
@@ -48,7 +48,7 @@ const updateProduct = async (req, res) => {
     if (product) {
       product.name = name !== undefined ? name : product.name;
       product.price = price !== undefined ? price : product.price;
-      product.gst = gst !== undefined ? gst : product.gst;
+      product.gst = (gst === undefined || gst === null || gst === '') ? 0 : Number(gst);
 
       const updatedProduct = await product.save();
       res.json(updatedProduct);
