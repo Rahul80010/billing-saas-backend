@@ -13,10 +13,10 @@ const generateToken = (id) => {
 // @route   POST /api/auth/register
 // @access  Public
 const registerUser = async (req, res) => {
-  const { name, email, phone, password } = req.body;
+  const { name, email, password } = req.body;
 
   try {
-    if (!name || !email || !phone || !password) {
+    if (!name || !email || !password) {
       return res.status(400).json({ message: 'Please add all fields' });
     }
 
@@ -24,40 +24,31 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
 
-    // Check if a VERIFIED user exists with same email or phone
+    // Check if a VERIFIED user exists with same email
     const verifiedUserExists = await User.findOne({
-      isVerified: true,
-      $or: [
-        { email: email.toLowerCase() },
-        { phone }
-      ]
+      email: email.toLowerCase(),
+      isVerified: true
     });
 
     if (verifiedUserExists) {
-      return res.status(400).json({ message: 'Email or Phone Number already registered' });
+      return res.status(400).json({ message: 'Email already registered' });
     }
 
     // Find if an UNVERIFIED record exists to reuse/update
     let user = await User.findOne({
-      isVerified: false,
-      $or: [
-        { email: email.toLowerCase() },
-        { phone }
-      ]
+      email: email.toLowerCase(),
+      isVerified: false
     });
 
     if (user) {
       // Reuse the unverified record
       user.name = name;
-      user.email = email.toLowerCase();
-      user.phone = phone;
-      user.password = password; // Pre-save hook will auto-hash this on save
+      user.password = password; // Pre-save hook hashes this on save
     } else {
       // Create new user
       user = new User({
         name,
         email: email.toLowerCase(),
-        phone,
         password,
       });
     }
@@ -81,25 +72,19 @@ const registerUser = async (req, res) => {
   }
 };
 
-// @desc    Authenticate a user (supports both Email and Phone)
+// @desc    Authenticate a user (Email only)
 // @route   POST /api/auth/login
 // @access  Public
 const loginUser = async (req, res) => {
-  const { email, username, password } = req.body;
-  const loginIdentifier = username || email;
+  const { email, password } = req.body;
 
   try {
-    if (!loginIdentifier || !password) {
-      return res.status(400).json({ message: 'Please include credentials and password' });
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Please include email and password' });
     }
 
-    // Search for user by either email or phone
-    const user = await User.findOne({
-      $or: [
-        { email: loginIdentifier.toLowerCase() },
-        { phone: loginIdentifier }
-      ]
-    });
+    // Search for user by email only
+    const user = await User.findOne({ email: email.toLowerCase() });
 
     if (user && (await user.matchPassword(password))) {
       // If user is not verified, block login and send new OTP
@@ -122,11 +107,10 @@ const loginUser = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
-        phone: user.phone,
         token: generateToken(user._id),
       });
     } else {
-      res.status(401).json({ message: 'Invalid credentials or password' });
+      res.status(401).json({ message: 'Invalid email or password' });
     }
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -164,7 +148,6 @@ const verifyOtp = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
-      phone: user.phone,
       token: generateToken(user._id),
     });
   } catch (error) {
@@ -202,6 +185,80 @@ const resendOtp = async (req, res) => {
   }
 };
 
+// @desc    Forgot Password - Send OTP to email
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    if (!email) {
+      return res.status(400).json({ message: 'Please provide email' });
+    }
+
+    // Check if verified user exists
+    const user = await User.findOne({ email: email.toLowerCase(), isVerified: true });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found with this email' });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetPasswordOtp = otp;
+    user.resetPasswordOtpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+
+    await user.save();
+
+    // Send Email using Nodemailer emailService
+    await sendOtpEmail(user.email, otp);
+
+    res.status(200).json({
+      message: 'Password reset OTP sent to your email',
+      email: user.email,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Reset Password using OTP
+// @route   POST /api/auth/reset-password
+// @access  Public
+const resetPassword = async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  try {
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ message: 'Please add all fields' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase(), isVerified: true });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.resetPasswordOtp !== otp || user.resetPasswordOtpExpires < new Date()) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    // Reset the password
+    user.password = newPassword; // Pre-save hook hashes it automatically!
+    user.resetPasswordOtp = undefined;
+    user.resetPasswordOtpExpires = undefined;
+    await user.save();
+
+    res.status(200).json({ message: 'Password reset successful' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Get user data
 // @route   GET /api/auth/me
 // @access  Private
@@ -218,5 +275,7 @@ module.exports = {
   loginUser,
   verifyOtp,
   resendOtp,
+  forgotPassword,
+  resetPassword,
   getMe,
 };

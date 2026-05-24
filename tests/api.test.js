@@ -20,7 +20,6 @@ beforeAll(async () => {
     .send({
       name: 'Test User',
       email: 'test@example.com',
-      phone: '1111111111',
       password: 'password123'
     });
 
@@ -40,7 +39,6 @@ beforeAll(async () => {
     .send({
       name: 'Second User',
       email: 'second@example.com',
-      phone: '2222222222',
       password: 'password123'
     });
 
@@ -66,7 +64,6 @@ describe('Authentication API', () => {
       .send({
         name: 'Short Pass',
         email: 'short@example.com',
-        phone: '3333333333',
         password: '123'
       });
     expect(res.statusCode).toEqual(400);
@@ -83,15 +80,39 @@ describe('Authentication API', () => {
     expect(res.body).toHaveProperty('token');
   });
 
-  it('should login test user with phone number and return JWT token', async () => {
+  it('should send reset OTP for forgot-password', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/auth/forgot-password')
+      .send({ email: 'test@example.com' });
+    expect(res.statusCode).toEqual(200);
+    expect(res.body.message).toBe('Password reset OTP sent to your email');
+  });
+
+  it('should reset password with correct OTP', async () => {
+    const User = mongoose.model('User');
+    const user = await User.findOne({ email: 'test@example.com' });
+    
+    const res = await request(app)
+      .post('/api/auth/reset-password')
       .send({
-        username: '1111111111',
-        password: 'password123'
+        email: 'test@example.com',
+        otp: user.resetPasswordOtp,
+        newPassword: 'newpassword123'
       });
     expect(res.statusCode).toEqual(200);
-    expect(res.body).toHaveProperty('token');
+    expect(res.body.message).toBe('Password reset successful');
+
+    // Confirm that we can login with the new password
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'test@example.com',
+        password: 'newpassword123'
+      });
+    expect(loginRes.statusCode).toEqual(200);
+    expect(loginRes.body).toHaveProperty('token');
+    // Restore original token so other tests run fine
+    token = loginRes.body.token;
   });
 
   it('should return user info for me route when authenticated', async () => {

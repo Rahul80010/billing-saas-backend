@@ -14,13 +14,6 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
   },
-  phone: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    index: true,
-  },
   password: {
     type: String,
     required: true,
@@ -34,6 +27,12 @@ const userSchema = new mongoose.Schema({
     type: String,
   },
   otpExpires: {
+    type: Date,
+  },
+  resetPasswordOtp: {
+    type: String,
+  },
+  resetPasswordOtpExpires: {
     type: Date,
   },
 }, { timestamps: true });
