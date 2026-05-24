@@ -34,45 +34,50 @@ router.get('/debug-smtp', (req, res) => {
 
 // Diagnostic route to synchronously test email sending and catch SMTP errors
 router.post('/test-email', async (req, res) => {
-  const { email } = req.body;
+  const { email, host: overrideHost, port: overridePort, user: overrideUser, pass: overridePass } = req.body;
   if (!email) {
     return res.status(400).json({ error: 'Please provide a target email address' });
   }
 
   const nodemailer = require('nodemailer');
-  const host = process.env.SMTP_HOST;
-  const port = process.env.SMTP_PORT || 587;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const host = overrideHost || process.env.SMTP_HOST;
+  const port = overridePort || process.env.SMTP_PORT || 587;
+  const user = overrideUser || process.env.SMTP_USER;
+  const pass = overridePass || process.env.SMTP_PASS;
   const from = process.env.SMTP_FROM || `"BillSaaS" <noreply@billsaas.com>`;
 
   if (!user || !pass) {
     return res.status(400).json({
-      error: 'SMTP credentials are not configured in environment variables (SMTP_USER or SMTP_PASS is missing)'
+      error: 'SMTP credentials are not configured (SMTP_USER or SMTP_PASS is missing)'
     });
   }
 
   try {
+    const isSecure = Number(port) === 465;
     const transporter = nodemailer.createTransport({
       host,
       port: Number(port),
-      secure: Number(port) === 465,
+      secure: isSecure,
       auth: {
         user,
         pass,
       },
+      // Increase timeout to 10 seconds to fail faster if blocked
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
     });
 
     const info = await transporter.sendMail({
-      from,
+      from: overrideUser ? `"BillSaaS Test" <${overrideUser}>` : from,
       to: email,
-      subject: 'BillSaaS SMTP Diagnostic Test',
-      text: 'If you are reading this email, your SMTP setup is 100% correct and active!',
+      subject: `BillSaaS SMTP Diagnostic Test (Port ${port})`,
+      text: `If you are reading this email, your SMTP setup is 100% correct and active! (Port: ${port}, Secure: ${isSecure})`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
           <h2 style="color: #10b981;">SMTP Configuration Verified!</h2>
           <p>Congratulations! Your Gmail SMTP integration is fully functional.</p>
-          <p>Sent via: <strong>${user}</strong> on host <strong>${host}:${port}</strong></p>
+          <p>Sent via: <strong>${user}</strong> on host <strong>${host}:${port}</strong> (Secure: ${isSecure})</p>
         </div>
       `
     });
