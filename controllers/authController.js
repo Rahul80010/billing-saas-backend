@@ -61,7 +61,7 @@ const registerUser = async (req, res) => {
     await user.save();
 
     // Trigger sending the email in background
-    await sendOtpEmail(user.email, otp);
+    sendOtpEmail(user.email, otp);
 
     res.status(200).json({
       message: 'Verification OTP sent to your email',
@@ -94,7 +94,7 @@ const loginUser = async (req, res) => {
         user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
         await user.save();
 
-        await sendOtpEmail(user.email, otp);
+        sendOtpEmail(user.email, otp);
 
         return res.status(401).json({
           unverified: true,
@@ -177,7 +177,7 @@ const resendOtp = async (req, res) => {
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
 
-    await sendOtpEmail(user.email, otp);
+    sendOtpEmail(user.email, otp);
 
     res.status(200).json({ message: 'OTP resent successfully' });
   } catch (error) {
@@ -211,7 +211,7 @@ const forgotPassword = async (req, res) => {
     await user.save();
 
     // Send Email using Nodemailer emailService
-    await sendOtpEmail(user.email, otp);
+    sendOtpEmail(user.email, otp);
 
     res.status(200).json({
       message: 'Password reset OTP sent to your email',
