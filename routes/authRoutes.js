@@ -27,6 +27,8 @@ router.get('/debug-smtp', (req, res) => {
     smtp_user: process.env.SMTP_USER || 'not defined',
     smtp_pass_exists: !!process.env.SMTP_PASS,
     smtp_from: process.env.SMTP_FROM || 'not defined',
+    resend_api_key_exists: !!process.env.RESEND_API_KEY,
+    resend_from: process.env.RESEND_FROM || 'not defined',
     node_env: process.env.NODE_ENV || 'not defined',
     jwt_secret_exists: !!process.env.JWT_SECRET
   });

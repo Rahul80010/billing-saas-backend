@@ -210,8 +210,8 @@ const forgotPassword = async (req, res) => {
 
     await user.save();
 
-    // Send Email using Nodemailer emailService
-    sendOtpEmail(user.email, otp);
+    // Send Email using Nodemailer emailService (configured as reset type)
+    sendOtpEmail(user.email, otp, 'reset');
 
     res.status(200).json({
       message: 'Password reset OTP sent to your email',
