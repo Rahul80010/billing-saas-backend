@@ -19,4 +19,17 @@ router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.get('/me', protect, getMe);
 
+// Safe debugging route to check live environment variable mapping
+router.get('/debug-smtp', (req, res) => {
+  res.json({
+    smtp_host: process.env.SMTP_HOST || 'not defined',
+    smtp_port: process.env.SMTP_PORT || 'not defined',
+    smtp_user: process.env.SMTP_USER || 'not defined',
+    smtp_pass_exists: !!process.env.SMTP_PASS,
+    smtp_from: process.env.SMTP_FROM || 'not defined',
+    node_env: process.env.NODE_ENV || 'not defined',
+    jwt_secret_exists: !!process.env.JWT_SECRET
+  });
+});
+
 module.exports = router;
