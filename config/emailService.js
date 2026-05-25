@@ -6,13 +6,13 @@ const sendOtpEmail = async (email, otp, type = 'verify') => {
   const port = process.env.SMTP_PORT || 587;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || `"BillSaaS" <noreply@billsaas.com>`;
+  const from = process.env.SMTP_FROM || `"MOHURI by Detalogy" <noreply@mohuri.com>`;
 
   // Configure text and templates based on type
   const isReset = type === 'reset';
-  const subject = isReset ? 'Reset your BillSaaS Password - OTP' : 'Verify your BillSaaS Account - OTP';
+  const subject = isReset ? 'Reset your MOHURI Password - OTP' : 'Verify your MOHURI Account - OTP';
   const actionText = isReset ? 'reset your password' : 'verify your account';
-  const headingText = isReset ? 'Reset Password Request' : 'Welcome to BillSaaS!';
+  const headingText = isReset ? 'MOHURI - Reset Password Request' : 'Welcome to MOHURI by Detalogy!';
   
   const text = `Your 6-digit verification code to ${actionText} is: ${otp}. This code is valid for 10 minutes.`;
   const html = `

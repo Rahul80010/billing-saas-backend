@@ -46,7 +46,7 @@ router.post('/test-email', async (req, res) => {
   const port = overridePort || process.env.SMTP_PORT || 587;
   const user = overrideUser || process.env.SMTP_USER;
   const pass = overridePass || process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || `"BillSaaS" <noreply@billsaas.com>`;
+  const from = process.env.SMTP_FROM || `"MOHURI by Detalogy" <noreply@mohuri.com>`;
 
   if (!user || !pass) {
     return res.status(400).json({
@@ -71,9 +71,9 @@ router.post('/test-email', async (req, res) => {
     });
 
     const info = await transporter.sendMail({
-      from: overrideUser ? `"BillSaaS Test" <${overrideUser}>` : from,
+      from: overrideUser ? `"MOHURI Test" <${overrideUser}>` : from,
       to: email,
-      subject: `BillSaaS SMTP Diagnostic Test (Port ${port})`,
+      subject: `MOHURI SMTP Diagnostic Test (Port ${port})`,
       text: `If you are reading this email, your SMTP setup is 100% correct and active! (Port: ${port}, Secure: ${isSecure})`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
