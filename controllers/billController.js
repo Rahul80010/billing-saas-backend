@@ -1,4 +1,5 @@
 const Bill = require('../models/Bill');
+const { sendWhatsappBill } = require('../services/whatsappService');
 
 // @desc    Get all bills
 // @route   GET /api/bills
@@ -64,6 +65,12 @@ const createBill = async (req, res) => {
     });
 
     const createdBill = await bill.save();
+
+    // Trigger WhatsApp bill in the background (non-blocking)
+    if (customerPhone) {
+      sendWhatsappBill(customerPhone, customerName, createdBill.total);
+    }
+
     res.status(201).json(createdBill);
   } catch (error) {
     res.status(400).json({ message: error.message });
