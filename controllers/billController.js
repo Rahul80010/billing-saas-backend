@@ -5,7 +5,11 @@ const Bill = require('../models/Bill');
 // @access  Private
 const getBills = async (req, res) => {
   try {
-    const bills = await Bill.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    const query = { userId: req.user._id };
+    if (req.query.phone) {
+      query.customerPhone = req.query.phone;
+    }
+    const bills = await Bill.find(query).sort({ createdAt: -1 });
     res.json(bills);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -16,7 +20,7 @@ const getBills = async (req, res) => {
 // @route   POST /api/bills
 // @access  Private
 const createBill = async (req, res) => {
-  const { customerName, items } = req.body;
+  const { customerName, customerPhone, items } = req.body;
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: 'No valid bill items provided' });
@@ -54,6 +58,7 @@ const createBill = async (req, res) => {
     const bill = new Bill({
       userId: req.user._id,
       customerName,
+      customerPhone,
       items: processedItems,
       total: Number(total.toFixed(2)),
     });

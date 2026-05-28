@@ -245,6 +245,34 @@ describe('Customers API', () => {
     expect(res.body.phone).toBe('0987654321');
   });
 
+  it('should upsert customer with same phone and update name', async () => {
+    const res1 = await request(app)
+      .post('/api/customers')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Original Customer',
+        phone: '9998887776'
+      });
+    expect(res1.statusCode).toBe(201);
+    const originalId = res1.body._id;
+
+    const res2 = await request(app)
+      .post('/api/customers')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Updated Customer Name',
+        phone: '9998887776'
+      });
+    
+    expect(res2.statusCode).toBe(200);
+    expect(res2.body._id).toBe(originalId);
+    expect(res2.body.name).toBe('Updated Customer Name');
+
+    await request(app)
+      .delete(`/api/customers/${originalId}`)
+      .set('Authorization', `Bearer ${token}`);
+  });
+
   it('should delete a customer', async () => {
     const res = await request(app)
       .delete(`/api/customers/${customerId}`)
@@ -307,6 +335,30 @@ describe('Bills API', () => {
       .set('Authorization', `Bearer ${secondUserToken}`);
     expect(resSecond.statusCode).toEqual(200);
     expect(resSecond.body.length).toBe(0);
+  });
+
+  it('should create a bill with customerPhone and support phone query parameter', async () => {
+    const uniquePhone = '9990001112';
+    const res = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Phone Filter Customer',
+        customerPhone: uniquePhone,
+        items: [
+          { productName: 'Filter Product', price: 100, quantity: 1, gst: 10 }
+        ]
+      });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.customerPhone).toBe(uniquePhone);
+
+    const queryRes = await request(app)
+      .get(`/api/bills?phone=${uniquePhone}`)
+      .set('Authorization', `Bearer ${token}`);
+    
+    expect(queryRes.statusCode).toBe(200);
+    expect(queryRes.body.length).toBe(1);
+    expect(queryRes.body[0].customerPhone).toBe(uniquePhone);
   });
 });
 

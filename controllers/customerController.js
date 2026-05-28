@@ -19,10 +19,30 @@ const createCustomer = async (req, res) => {
   const { name, phone } = req.body;
 
   try {
-    const customer = new Customer({
+    if (!name || !phone) {
+      return res.status(400).json({ message: 'Name and phone are required' });
+    }
+
+    const cleanPhone = phone.trim();
+    const cleanName = name.trim();
+
+    // Check if customer with same phone already exists for this merchant user
+    let customer = await Customer.findOne({ userId: req.user._id, phone: cleanPhone });
+
+    if (customer) {
+      // If it exists, update the name if it is different, and return the existing record
+      if (customer.name !== cleanName) {
+        customer.name = cleanName;
+        await customer.save();
+      }
+      return res.status(200).json(customer);
+    }
+
+    // Otherwise, create a new customer
+    customer = new Customer({
       userId: req.user._id,
-      name,
-      phone,
+      name: cleanName,
+      phone: cleanPhone,
     });
 
     const createdCustomer = await customer.save();
