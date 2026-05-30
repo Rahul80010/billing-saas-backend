@@ -21,6 +21,11 @@ const productSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  stock: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', productSchema);

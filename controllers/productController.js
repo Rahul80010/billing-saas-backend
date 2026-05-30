@@ -16,7 +16,7 @@ const getProducts = async (req, res) => {
 // @route   POST /api/products
 // @access  Private
 const createProduct = async (req, res) => {
-  const { name, price, gst } = req.body;
+  const { name, price, gst, stock } = req.body;
 
   try {
     const product = new Product({
@@ -24,6 +24,7 @@ const createProduct = async (req, res) => {
       name,
       price,
       gst: (gst === undefined || gst === null || gst === '') ? 0 : Number(gst),
+      stock: (stock === undefined || stock === null || stock === '') ? 0 : Number(stock),
     });
 
     const createdProduct = await product.save();
@@ -37,7 +38,7 @@ const createProduct = async (req, res) => {
 // @route   PUT /api/products/:id
 // @access  Private
 const updateProduct = async (req, res) => {
-  const { name, price, gst } = req.body;
+  const { name, price, gst, stock } = req.body;
 
   try {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
@@ -49,6 +50,7 @@ const updateProduct = async (req, res) => {
       product.name = name !== undefined ? name : product.name;
       product.price = price !== undefined ? price : product.price;
       product.gst = (gst === undefined || gst === null || gst === '') ? 0 : Number(gst);
+      product.stock = (stock !== undefined && stock !== null && stock !== '') ? Number(stock) : product.stock;
 
       const updatedProduct = await product.save();
       res.json(updatedProduct);

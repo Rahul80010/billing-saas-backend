@@ -1,4 +1,5 @@
 const Bill = require('../models/Bill');
+const Product = require('../models/Product');
 const { sendWhatsappBill } = require('../services/whatsappService');
 
 // @desc    Get all bills
@@ -65,6 +66,18 @@ const createBill = async (req, res) => {
     });
 
     const createdBill = await bill.save();
+
+    // Auto deduct product stock in the background (non-blocking)
+    try {
+      for (const item of processedItems) {
+        await Product.findOneAndUpdate(
+          { userId: req.user._id, name: item.productName },
+          { $inc: { stock: -item.quantity } }
+        );
+      }
+    } catch (stockErr) {
+      console.error('Error auto-deducting stock:', stockErr);
+    }
 
     // Trigger WhatsApp bill in the background (non-blocking)
     if (customerPhone) {
