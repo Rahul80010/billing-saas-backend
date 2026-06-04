@@ -10,14 +10,18 @@ const formatPhoneNumber = (phone) => {
 };
 
 /**
- * Sends a transactional WhatsApp message to a customer with their bill details
+ * Sends a transactional WhatsApp document message to a customer with their invoice PDF
  * @param {string} phone - Customer's phone number
  * @param {string} customerName - Customer's name
  * @param {number} total - Bill total amount
+ * @param {string} pdfLink - Public link to the dynamic invoice PDF
+ * @param {string} businessName - Merchant's business name
+ * @param {object} userConfig - Merchant's custom WhatsApp credentials
  */
-const sendWhatsappBill = async (phone, customerName, total) => {
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
+const sendWhatsappBill = async (phone, customerName, total, pdfLink, businessName, userConfig = {}) => {
+  // Use merchant's custom credentials if configured, otherwise fallback to system global envs
+  const token = userConfig.whatsappToken || process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = userConfig.whatsappPhoneNumberId || process.env.PHONE_NUMBER_ID;
 
   const cleanPhone = formatPhoneNumber(phone);
   if (!cleanPhone) {
@@ -25,14 +29,18 @@ const sendWhatsappBill = async (phone, customerName, total) => {
     return false;
   }
 
-  const messageBody = `Hello ${customerName},\n\nYour bill has been generated successfully.\n\nTotal Amount: ₹${Number(total).toFixed(2)}\n\nThank you 🙏`;
+  const billId = pdfLink ? pdfLink.split('/').slice(-2)[0] : 'RECEIPT';
+  const shortBillId = billId.slice(-6).toUpperCase();
+  const filename = `invoice_${shortBillId}.pdf`;
+  const caption = `Hello ${customerName}, here is your invoice from ${businessName || 'MOHURI'}.\nTotal: ₹${Number(total).toFixed(2)}`;
 
-  // Sandbox Mode: if Meta API credentials are not configured, print to the server logs
+  // Sandbox Mode: if no API credentials are configured, print to the server logs
   if (!token || !phoneNumberId) {
     console.log('\n==================================================');
-    console.log(`[WHATSAPP SANDBOX MODE] Sending to: ${cleanPhone}`);
-    console.log('Body:');
-    console.log(messageBody);
+    console.log(`[WHATSAPP SANDBOX MODE] Sending PDF to: ${cleanPhone}`);
+    console.log(`Merchant Business Name: ${businessName || 'MOHURI'}`);
+    console.log(`PDF Document Link: ${pdfLink || 'N/A'}`);
+    console.log(`Caption: ${caption}`);
     console.log('==================================================\n');
     return true;
   }
@@ -44,14 +52,15 @@ const sendWhatsappBill = async (phone, customerName, total) => {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to: cleanPhone,
-      type: 'text',
-      text: {
-        preview_url: false,
-        body: messageBody
+      type: 'document',
+      document: {
+        link: pdfLink,
+        caption: caption,
+        filename: filename
       }
     };
 
-    console.log(`[WhatsApp] Dispatching bill notification to: ${cleanPhone}`);
+    console.log(`[WhatsApp] Dispatching invoice document to: ${cleanPhone} (Using config: ${userConfig.whatsappToken ? 'Merchant Custom' : 'System Default'})`);
     
     const response = await axios.post(url, payload, {
       headers: {
@@ -62,7 +71,7 @@ const sendWhatsappBill = async (phone, customerName, total) => {
     });
 
     if (response.status === 200 || response.status === 201) {
-      console.log(`[WhatsApp] Message successfully sent to ${cleanPhone}. Message ID: ${response.data.messages?.[0]?.id || 'N/A'}`);
+      console.log(`[WhatsApp] PDF invoice successfully sent to ${cleanPhone}. Message ID: ${response.data.messages?.[0]?.id || 'N/A'}`);
       return true;
     } else {
       console.error(`[WhatsApp] Meta API returned non-200 status code: ${response.status}`, response.data);
@@ -70,7 +79,7 @@ const sendWhatsappBill = async (phone, customerName, total) => {
     }
   } catch (error) {
     const errorDetails = error.response ? error.response.data : error.message;
-    console.error(`[WhatsApp] Failed to send message to ${cleanPhone}:`, errorDetails);
+    console.error(`[WhatsApp] Failed to send invoice document to ${cleanPhone}:`, errorDetails);
     return false;
   }
 };

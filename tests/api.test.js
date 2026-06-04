@@ -393,3 +393,55 @@ describe('Real User Flow', () => {
     expect(billRes.body.total).toBe(330); // (100 * 3) + 10% = 330
   });
 });
+
+describe('User Profile API', () => {
+  it('should update user business profile and whatsapp details', async () => {
+    const res = await request(app)
+      .put('/api/auth/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        businessName: 'My Awesome Retail Store',
+        whatsappToken: 'meta_fake_token_123',
+        whatsappPhoneNumberId: '123456789012'
+      });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.businessName).toBe('My Awesome Retail Store');
+    expect(res.body.whatsappToken).toBe('meta_fake_token_123');
+    expect(res.body.whatsappPhoneNumberId).toBe('123456789012');
+
+    // Verify 'me' endpoint returns these updated credentials
+    const meRes = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+    expect(meRes.statusCode).toBe(200);
+    expect(meRes.body.businessName).toBe('My Awesome Retail Store');
+    expect(meRes.body.whatsappToken).toBe('meta_fake_token_123');
+    expect(meRes.body.whatsappPhoneNumberId).toBe('123456789012');
+  });
+});
+
+describe('Bills Public PDF API', () => {
+  it('should retrieve dynamically generated print invoice PDF without authentication', async () => {
+    // Generate a temporary bill
+    const billRes = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'PDF Test User',
+        items: [
+          { productName: 'PDF Item', price: 10, quantity: 5, gst: 10 }
+        ]
+      });
+    expect(billRes.statusCode).toBe(201);
+    const billId = billRes.body._id;
+
+    // Fetch PDF dynamically (unprotected)
+    const pdfRes = await request(app)
+      .get(`/api/bills/${billId}/pdf`);
+    
+    expect(pdfRes.statusCode).toBe(200);
+    expect(pdfRes.headers['content-type']).toBe('application/pdf');
+    expect(pdfRes.headers['content-disposition']).toContain(`invoice_${billId.toString().slice(-6).toUpperCase()}.pdf`);
+    expect(pdfRes.body).toBeInstanceOf(Buffer);
+  });
+});

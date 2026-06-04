@@ -270,6 +270,37 @@ const getMe = async (req, res) => {
   }
 };
 
+// @desc    Update user profile details
+// @route   PUT /api/auth/profile
+// @access  Private
+const updateProfile = async (req, res) => {
+  const { businessName, whatsappToken, whatsappPhoneNumberId } = req.body;
+
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (user) {
+      user.businessName = businessName !== undefined ? businessName : user.businessName;
+      user.whatsappToken = whatsappToken !== undefined ? whatsappToken : user.whatsappToken;
+      user.whatsappPhoneNumberId = whatsappPhoneNumberId !== undefined ? whatsappPhoneNumberId : user.whatsappPhoneNumberId;
+
+      const updatedUser = await user.save();
+      res.json({
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        businessName: updatedUser.businessName,
+        whatsappToken: updatedUser.whatsappToken,
+        whatsappPhoneNumberId: updatedUser.whatsappPhoneNumberId,
+      });
+    } else {
+      res.status(404).json({ message: 'User not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -278,4 +309,5 @@ module.exports = {
   forgotPassword,
   resetPassword,
   getMe,
+  updateProfile,
 };

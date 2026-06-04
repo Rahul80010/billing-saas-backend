@@ -1,6 +1,7 @@
 const Bill = require('../models/Bill');
 const Product = require('../models/Product');
 const { sendWhatsappBill } = require('../services/whatsappService');
+const { generateInvoicePdf } = require('../services/pdfService');
 
 // @desc    Get all bills
 // @route   GET /api/bills
@@ -81,7 +82,13 @@ const createBill = async (req, res) => {
 
     // Trigger WhatsApp bill in the background (non-blocking)
     if (customerPhone) {
-      sendWhatsappBill(customerPhone, customerName, createdBill.total);
+      const businessName = req.user.businessName || req.user.name;
+      const pdfLink = `${req.protocol}://${req.get('host')}/api/bills/${createdBill._id}/pdf`;
+      const userConfig = {
+        whatsappToken: req.user.whatsappToken,
+        whatsappPhoneNumberId: req.user.whatsappPhoneNumberId
+      };
+      sendWhatsappBill(customerPhone, customerName, createdBill.total, pdfLink, businessName, userConfig);
     }
 
     res.status(201).json(createdBill);
@@ -90,7 +97,30 @@ const createBill = async (req, res) => {
   }
 };
 
+// @desc    Get dynamic PDF invoice for a bill
+// @route   GET /api/bills/:id/pdf
+// @access  Public
+const getBillPdf = async (req, res) => {
+  try {
+    const bill = await Bill.findById(req.params.id).populate('userId');
+    if (!bill) {
+      return res.status(404).json({ message: 'Bill not found' });
+    }
+
+    const businessName = bill.userId?.businessName || bill.userId?.name || 'MOHURI Invoice';
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=invoice_${bill._id.toString().slice(-6).toUpperCase()}.pdf`);
+
+    generateInvoicePdf(bill, businessName, res);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getBills,
   createBill,
+  getBillPdf,
 };

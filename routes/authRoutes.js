@@ -8,6 +8,7 @@ const {
   forgotPassword,
   resetPassword,
   getMe,
+  updateProfile,
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -18,6 +19,7 @@ router.post('/resend-otp', resendOtp);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.get('/me', protect, getMe);
+router.put('/profile', protect, updateProfile);
 
 // Safe debugging route to check live environment variable mapping
 router.get('/debug-smtp', (req, res) => {

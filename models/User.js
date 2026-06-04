@@ -35,6 +35,21 @@ const userSchema = new mongoose.Schema({
   resetPasswordOtpExpires: {
     type: Date,
   },
+  businessName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  whatsappToken: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  whatsappPhoneNumberId: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 }, { timestamps: true });
 
 // Pre-save hook to hash password
