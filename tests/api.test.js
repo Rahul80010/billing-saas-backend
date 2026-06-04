@@ -402,12 +402,20 @@ describe('User Profile API', () => {
       .send({
         businessName: 'My Awesome Retail Store',
         whatsappToken: 'meta_fake_token_123',
-        whatsappPhoneNumberId: '123456789012'
+        whatsappPhoneNumberId: '123456789012',
+        businessAddress: '123 Test Ave',
+        businessPhone: '+91 1111111111',
+        gstin: '22GSTIN1234A1Z0',
+        invoiceFooter: 'Mock Footer Note'
       });
     expect(res.statusCode).toBe(200);
     expect(res.body.businessName).toBe('My Awesome Retail Store');
     expect(res.body.whatsappToken).toBe('meta_fake_token_123');
     expect(res.body.whatsappPhoneNumberId).toBe('123456789012');
+    expect(res.body.businessAddress).toBe('123 Test Ave');
+    expect(res.body.businessPhone).toBe('+91 1111111111');
+    expect(res.body.gstin).toBe('22GSTIN1234A1Z0');
+    expect(res.body.invoiceFooter).toBe('Mock Footer Note');
 
     // Verify 'me' endpoint returns these updated credentials
     const meRes = await request(app)
@@ -417,6 +425,10 @@ describe('User Profile API', () => {
     expect(meRes.body.businessName).toBe('My Awesome Retail Store');
     expect(meRes.body.whatsappToken).toBe('meta_fake_token_123');
     expect(meRes.body.whatsappPhoneNumberId).toBe('123456789012');
+    expect(meRes.body.businessAddress).toBe('123 Test Ave');
+    expect(meRes.body.businessPhone).toBe('+91 1111111111');
+    expect(meRes.body.gstin).toBe('22GSTIN1234A1Z0');
+    expect(meRes.body.invoiceFooter).toBe('Mock Footer Note');
   });
 });
 

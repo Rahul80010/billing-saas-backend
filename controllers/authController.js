@@ -274,7 +274,15 @@ const getMe = async (req, res) => {
 // @route   PUT /api/auth/profile
 // @access  Private
 const updateProfile = async (req, res) => {
-  const { businessName, whatsappToken, whatsappPhoneNumberId } = req.body;
+  const { 
+    businessName, 
+    whatsappToken, 
+    whatsappPhoneNumberId,
+    businessAddress,
+    businessPhone,
+    gstin,
+    invoiceFooter
+  } = req.body;
 
   try {
     const user = await User.findById(req.user._id);
@@ -283,6 +291,10 @@ const updateProfile = async (req, res) => {
       user.businessName = businessName !== undefined ? businessName : user.businessName;
       user.whatsappToken = whatsappToken !== undefined ? whatsappToken : user.whatsappToken;
       user.whatsappPhoneNumberId = whatsappPhoneNumberId !== undefined ? whatsappPhoneNumberId : user.whatsappPhoneNumberId;
+      user.businessAddress = businessAddress !== undefined ? businessAddress : user.businessAddress;
+      user.businessPhone = businessPhone !== undefined ? businessPhone : user.businessPhone;
+      user.gstin = gstin !== undefined ? gstin : user.gstin;
+      user.invoiceFooter = invoiceFooter !== undefined ? invoiceFooter : user.invoiceFooter;
 
       const updatedUser = await user.save();
       res.json({
@@ -292,6 +304,10 @@ const updateProfile = async (req, res) => {
         businessName: updatedUser.businessName,
         whatsappToken: updatedUser.whatsappToken,
         whatsappPhoneNumberId: updatedUser.whatsappPhoneNumberId,
+        businessAddress: updatedUser.businessAddress,
+        businessPhone: updatedUser.businessPhone,
+        gstin: updatedUser.gstin,
+        invoiceFooter: updatedUser.invoiceFooter,
       });
     } else {
       res.status(404).json({ message: 'User not found' });

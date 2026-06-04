@@ -3,14 +3,28 @@ const PDFDocument = require('pdfkit');
 /**
  * Generates an elegant print-friendly PDF invoice from a bill and pipes it to the HTTP response stream.
  * @param {object} bill - Mongoose Bill document
- * @param {string} businessName - Merchant's business name
+ * @param {object|string} businessConfig - Merchant's business settings or businessName string
  * @param {object} res - Express Response object
  */
-const generateInvoicePdf = (bill, businessName, res) => {
+const generateInvoicePdf = (bill, businessConfig, res) => {
   const doc = new PDFDocument({ margin: 50 });
 
   // Pipe the document directly to the response
   doc.pipe(res);
+
+  // Parse configuration
+  let config = {};
+  if (typeof businessConfig === 'string') {
+    config.businessName = businessConfig;
+  } else {
+    config = businessConfig || {};
+  }
+
+  const bName = config.businessName || 'MOHURI Invoice';
+  const bAddress = config.businessAddress || '';
+  const bPhone = config.businessPhone || '';
+  const bGstin = config.gstin || '';
+  const bFooter = config.invoiceFooter || 'Thank you for your purchase! Please visit us again. 🙏';
 
   // Styling palette
   const primaryColor = '#093a84'; // Premium MOHURI navy blue
@@ -18,18 +32,42 @@ const generateInvoicePdf = (bill, businessName, res) => {
   const textColor = '#1f2937'; // Slate dark gray
   const secondaryText = '#6b7280'; // Cool gray
   
-  // 1. Header Section
+  // 1. Header Section (Left Side - Business Details)
   doc
     .fillColor(primaryColor)
-    .fontSize(22)
+    .fontSize(18)
     .font('Helvetica-Bold')
-    .text(businessName || 'MOHURI Invoice', 50, 50);
+    .text(bName, 50, 45);
 
-  doc
-    .fillColor(secondaryText)
-    .fontSize(10)
-    .font('Helvetica')
-    .text('Tax Invoice / Receipt', 50, 75);
+  let currentY = 65;
+
+  if (bAddress) {
+    doc
+      .fillColor(secondaryText)
+      .fontSize(8)
+      .font('Helvetica')
+      .text(bAddress, 50, currentY, { width: 250 });
+    // Approx height adjustment for address line wrap
+    currentY += bAddress.length > 40 ? 22 : 12;
+  }
+
+  if (bPhone) {
+    doc
+      .fillColor(secondaryText)
+      .fontSize(8)
+      .font('Helvetica')
+      .text(`Phone: ${bPhone}`, 50, currentY);
+    currentY += 12;
+  }
+
+  if (bGstin) {
+    doc
+      .fillColor(secondaryText)
+      .fontSize(8)
+      .font('Helvetica')
+      .text(`GSTIN: ${bGstin}`, 50, currentY);
+    currentY += 12;
+  }
 
   // Invoice Details (Right-aligned)
   const invoiceId = bill._id.toString().toUpperCase();
@@ -37,49 +75,51 @@ const generateInvoicePdf = (bill, businessName, res) => {
     .fillColor(textColor)
     .fontSize(9)
     .font('Helvetica-Bold')
-    .text('INVOICE DETAIL', 400, 50, { align: 'right' })
+    .text('INVOICE DETAIL', 400, 45, { align: 'right' })
     .font('Helvetica')
     .fillColor(secondaryText)
-    .text(`Invoice ID: ${invoiceId}`, 400, 65, { align: 'right' })
-    .text(`Date: ${new Date(bill.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}`, 400, 78, { align: 'right' });
+    .text(`Invoice ID: ${invoiceId}`, 400, 60, { align: 'right' })
+    .text(`Date: ${new Date(bill.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}`, 400, 72, { align: 'right' });
 
   // Divider Line
+  const dividerY = Math.max(105, currentY + 10);
   doc
     .strokeColor('#e5e7eb')
     .lineWidth(1)
-    .moveTo(50, 100)
-    .lineTo(550, 100)
+    .moveTo(50, dividerY)
+    .lineTo(550, dividerY)
     .stroke();
-
+ 
   // 2. Billing Info Section
+  const billingInfoY = dividerY + 15;
   doc
     .fillColor(textColor)
     .fontSize(10)
     .font('Helvetica-Bold')
-    .text('BILL TO:', 50, 120);
-
+    .text('BILL TO:', 50, billingInfoY);
+ 
   doc
     .font('Helvetica')
     .fontSize(10)
     .fillColor(textColor)
-    .text(`Customer Name: ${bill.customerName}`, 50, 138)
-    .text(`Contact Phone: ${bill.customerPhone || 'N/A'}`, 50, 153);
-
+    .text(`Customer Name: ${bill.customerName}`, 50, billingInfoY + 18)
+    .text(`Contact Phone: ${bill.customerPhone || 'N/A'}`, 50, billingInfoY + 33);
+ 
   // 3. Items Table Section
-  const tableTop = 190;
+  const tableTop = billingInfoY + 60;
   
   // Table Headers
   doc
     .fillColor(primaryColor)
     .font('Helvetica-Bold')
     .fontSize(9);
-
+ 
   doc.text('Item Description', 50, tableTop);
   doc.text('Qty', 260, tableTop, { width: 40, align: 'right' });
   doc.text('Unit Price', 310, tableTop, { width: 70, align: 'right' });
   doc.text('GST (%)', 390, tableTop, { width: 60, align: 'right' });
   doc.text('Amount (₹)', 460, tableTop, { width: 90, align: 'right' });
-
+ 
   // Header separator line
   doc
     .strokeColor(primaryColor)
@@ -139,7 +179,7 @@ const generateInvoicePdf = (bill, businessName, res) => {
     .fillColor(secondaryText)
     .font('Helvetica-Oblique')
     .fontSize(9)
-    .text('Thank you for your purchase! Please visit us again. 🙏', 50, totalsTop + 50, { align: 'center', width: 500 });
+    .text(bFooter, 50, totalsTop + 50, { align: 'center', width: 500 });
 
   // Finalize the PDF file
   doc.end();

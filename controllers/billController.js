@@ -107,12 +107,18 @@ const getBillPdf = async (req, res) => {
       return res.status(404).json({ message: 'Bill not found' });
     }
 
-    const businessName = bill.userId?.businessName || bill.userId?.name || 'MOHURI Invoice';
+    const businessConfig = {
+      businessName: bill.userId?.businessName || bill.userId?.name || 'MOHURI Invoice',
+      businessAddress: bill.userId?.businessAddress || '',
+      businessPhone: bill.userId?.businessPhone || '',
+      gstin: bill.userId?.gstin || '',
+      invoiceFooter: bill.userId?.invoiceFooter || ''
+    };
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename=invoice_${bill._id.toString().slice(-6).toUpperCase()}.pdf`);
 
-    generateInvoicePdf(bill, businessName, res);
+    generateInvoicePdf(bill, businessConfig, res);
   } catch (error) {
     console.error('Error generating PDF:', error);
     res.status(500).json({ message: error.message });

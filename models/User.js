@@ -50,6 +50,26 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  businessAddress: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  businessPhone: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  gstin: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  invoiceFooter: {
+    type: String,
+    trim: true,
+    default: 'Thank you for your purchase! Please visit us again. 🙏',
+  },
 }, { timestamps: true });
 
 // Pre-save hook to hash password
