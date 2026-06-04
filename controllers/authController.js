@@ -281,7 +281,8 @@ const updateProfile = async (req, res) => {
     businessAddress,
     businessPhone,
     gstin,
-    invoiceFooter
+    invoiceFooter,
+    logo
   } = req.body;
 
   try {
@@ -295,6 +296,7 @@ const updateProfile = async (req, res) => {
       user.businessPhone = businessPhone !== undefined ? businessPhone : user.businessPhone;
       user.gstin = gstin !== undefined ? gstin : user.gstin;
       user.invoiceFooter = invoiceFooter !== undefined ? invoiceFooter : user.invoiceFooter;
+      user.logo = logo !== undefined ? logo : user.logo;
 
       const updatedUser = await user.save();
       res.json({
@@ -308,6 +310,7 @@ const updateProfile = async (req, res) => {
         businessPhone: updatedUser.businessPhone,
         gstin: updatedUser.gstin,
         invoiceFooter: updatedUser.invoiceFooter,
+        logo: updatedUser.logo,
       });
     } else {
       res.status(404).json({ message: 'User not found' });

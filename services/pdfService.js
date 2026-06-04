@@ -25,6 +25,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   const bPhone = config.businessPhone || '';
   const bGstin = config.gstin || '';
   const bFooter = config.invoiceFooter || 'Thank you for your purchase! Please visit us again. 🙏';
+  const bLogo = config.logo || '';
 
   // Styling palette
   const primaryColor = '#093a84'; // Premium MOHURI navy blue
@@ -33,11 +34,24 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   const secondaryText = '#6b7280'; // Cool gray
   
   // 1. Header Section (Left Side - Business Details)
+  let startX = 50;
+
+  if (bLogo) {
+    try {
+      const base64Data = bLogo.replace(/^data:image\/\w+;base64,/, "");
+      const logoBuffer = Buffer.from(base64Data, 'base64');
+      doc.image(logoBuffer, 50, 40, { fit: [50, 50] });
+      startX = 115;
+    } catch (imgError) {
+      console.error('Error drawing merchant logo on PDF:', imgError);
+    }
+  }
+
   doc
     .fillColor(primaryColor)
     .fontSize(18)
     .font('Helvetica-Bold')
-    .text(bName, 50, 45);
+    .text(bName, startX, 45);
 
   let currentY = 65;
 
@@ -46,7 +60,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       .fillColor(secondaryText)
       .fontSize(8)
       .font('Helvetica')
-      .text(bAddress, 50, currentY, { width: 250 });
+      .text(bAddress, startX, currentY, { width: 250 });
     // Approx height adjustment for address line wrap
     currentY += bAddress.length > 40 ? 22 : 12;
   }
@@ -56,7 +70,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       .fillColor(secondaryText)
       .fontSize(8)
       .font('Helvetica')
-      .text(`Phone: ${bPhone}`, 50, currentY);
+      .text(`Phone: ${bPhone}`, startX, currentY);
     currentY += 12;
   }
 
@@ -65,7 +79,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       .fillColor(secondaryText)
       .fontSize(8)
       .font('Helvetica')
-      .text(`GSTIN: ${bGstin}`, 50, currentY);
+      .text(`GSTIN: ${bGstin}`, startX, currentY);
     currentY += 12;
   }
 

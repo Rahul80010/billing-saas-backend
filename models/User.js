@@ -70,6 +70,10 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: 'Thank you for your purchase! Please visit us again. 🙏',
   },
+  logo: {
+    type: String,
+    default: '',
+  },
 }, { timestamps: true });
 
 // Pre-save hook to hash password
