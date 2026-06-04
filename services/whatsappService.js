@@ -26,7 +26,7 @@ const sendWhatsappBill = async (phone, customerName, total, pdfLink, businessNam
   const cleanPhone = formatPhoneNumber(phone);
   if (!cleanPhone) {
     console.error('[WhatsApp] Failed: Target phone number is empty or invalid.');
-    return false;
+    return { success: false, error: 'Target phone number is empty or invalid.' };
   }
 
   const billId = pdfLink ? pdfLink.split('/').slice(-2)[0] : 'RECEIPT';
@@ -42,7 +42,7 @@ const sendWhatsappBill = async (phone, customerName, total, pdfLink, businessNam
     console.log(`PDF Document Link: ${pdfLink || 'N/A'}`);
     console.log(`Caption: ${caption}`);
     console.log('==================================================\n');
-    return true;
+    return { success: true, sandbox: true, caption };
   }
 
   try {
@@ -72,15 +72,15 @@ const sendWhatsappBill = async (phone, customerName, total, pdfLink, businessNam
 
     if (response.status === 200 || response.status === 201) {
       console.log(`[WhatsApp] PDF invoice successfully sent to ${cleanPhone}. Message ID: ${response.data.messages?.[0]?.id || 'N/A'}`);
-      return true;
+      return { success: true, messageId: response.data.messages?.[0]?.id || 'N/A' };
     } else {
       console.error(`[WhatsApp] Meta API returned non-200 status code: ${response.status}`, response.data);
-      return false;
+      return { success: false, error: `Meta API returned non-200 status: ${response.status}. Detail: ${JSON.stringify(response.data)}` };
     }
   } catch (error) {
     const errorDetails = error.response ? error.response.data : error.message;
     console.error(`[WhatsApp] Failed to send invoice document to ${cleanPhone}:`, errorDetails);
-    return false;
+    return { success: false, error: typeof errorDetails === 'object' ? JSON.stringify(errorDetails) : errorDetails };
   }
 };
 

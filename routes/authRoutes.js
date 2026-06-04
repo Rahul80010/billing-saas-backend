@@ -9,6 +9,7 @@ const {
   resetPassword,
   getMe,
   updateProfile,
+  testWhatsapp,
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -20,6 +21,7 @@ router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
+router.post('/test-whatsapp', protect, testWhatsapp);
 
 // Safe debugging route to check live environment variable mapping
 router.get('/debug-smtp', (req, res) => {

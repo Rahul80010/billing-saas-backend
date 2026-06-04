@@ -445,3 +445,31 @@ describe('Bills Public PDF API', () => {
     expect(pdfRes.body).toBeInstanceOf(Buffer);
   });
 });
+
+describe('WhatsApp Test Connection API', () => {
+  it('should return error if phone number is missing', async () => {
+    const res = await request(app)
+      .post('/api/auth/test-whatsapp')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        whatsappToken: 'some_token',
+        whatsappPhoneNumberId: 'some_id'
+      });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe('Please provide a target phone number');
+  });
+
+  it('should return success in sandbox mode if credentials are empty', async () => {
+    const res = await request(app)
+      .post('/api/auth/test-whatsapp')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        phone: '919876543210',
+        whatsappToken: '',
+        whatsappPhoneNumberId: ''
+      });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.message).toContain('Sandbox mode active');
+  });
+});

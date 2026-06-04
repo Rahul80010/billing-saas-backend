@@ -301,6 +301,52 @@ const updateProfile = async (req, res) => {
   }
 };
 
+// @desc    Test WhatsApp Cloud API Connection
+// @route   POST /api/auth/test-whatsapp
+// @access  Private
+const testWhatsapp = async (req, res) => {
+  const { phone, whatsappToken, whatsappPhoneNumberId } = req.body;
+
+  if (!phone) {
+    return res.status(400).json({ message: 'Please provide a target phone number' });
+  }
+
+  // Use values from request body (unsaved/preview) or fallback to saved credentials
+  const token = whatsappToken !== undefined ? whatsappToken.trim() : req.user.whatsappToken;
+  const phoneNumberId = whatsappPhoneNumberId !== undefined ? whatsappPhoneNumberId.trim() : req.user.whatsappPhoneNumberId;
+  const businessName = req.user.businessName || req.user.name || 'Test Store';
+
+  try {
+    const { sendWhatsappBill } = require('../services/whatsappService');
+    const dummyPdf = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+    
+    const result = await sendWhatsappBill(
+      phone,
+      'Test Customer',
+      99.00,
+      dummyPdf,
+      businessName,
+      { whatsappToken: token, whatsappPhoneNumberId: phoneNumberId }
+    );
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: result.sandbox 
+          ? 'Sandbox mode active. Check backend console logs to see the test output.' 
+          : `Test message sent successfully! Message ID: ${result.messageId}`
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.error || 'Failed to send WhatsApp message.'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -310,4 +356,5 @@ module.exports = {
   resetPassword,
   getMe,
   updateProfile,
+  testWhatsapp,
 };
