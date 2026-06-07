@@ -70,6 +70,18 @@ const sendOtpEmail = async (email, otp, type = 'verify') => {
     console.log(`[SANDBOX MODE] Type: ${type}`);
     console.log(`[SANDBOX MODE] Your 6-Digit OTP is: ${otp}`);
     console.log('==================================================\n');
+
+    // Also write to a local log file in the project root so user can easily read it
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logPath = path.join(__dirname, '../otp-debug.log');
+      const logMessage = `[${new Date().toLocaleString()}] Email: ${email} | Type: ${type} | OTP: ${otp}\n`;
+      fs.appendFileSync(logPath, logMessage);
+    } catch (fsErr) {
+      console.error('Failed to write OTP to debug file:', fsErr.message);
+    }
+
     return true;
   }
 
