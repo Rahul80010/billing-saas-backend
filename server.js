@@ -15,13 +15,19 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/customers', require('./routes/customerRoutes'));
 app.use('/api/bills', require('./routes/billRoutes'));
+app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
+app.use('/api/webhooks', require('./routes/webhookRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {
