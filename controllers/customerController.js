@@ -99,9 +99,30 @@ const deleteCustomer = async (req, res) => {
   }
 };
 
+// @desc    Get customer by ID
+// @route   GET /api/customers/:id
+// @access  Private
+const getCustomerById = async (req, res) => {
+  try {
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id });
+
+    if (customer) {
+      res.json(customer);
+    } else {
+      res.status(404).json({ message: 'Customer not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getCustomers,
   createCustomer,
   updateCustomer,
   deleteCustomer,
+  getCustomerById,
 };

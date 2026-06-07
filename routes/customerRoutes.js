@@ -5,6 +5,7 @@ const {
   createCustomer,
   updateCustomer,
   deleteCustomer,
+  getCustomerById,
 } = require('../controllers/customerController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -12,6 +13,6 @@ const { protect } = require('../middleware/authMiddleware');
 router.use(protect);
 
 router.route('/').get(getCustomers).post(createCustomer);
-router.route('/:id').put(updateCustomer).delete(deleteCustomer);
+router.route('/:id').get(getCustomerById).put(updateCustomer).delete(deleteCustomer);
 
 module.exports = router;

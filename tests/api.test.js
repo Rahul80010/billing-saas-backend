@@ -485,3 +485,98 @@ describe('WhatsApp Test Connection API', () => {
     expect(res.body.message).toContain('Sandbox mode active');
   });
 });
+
+describe('Credit / Udhaar API', () => {
+  let creditBillId;
+
+  it('should create a bill with paymentType: Credit and correct credit fields', async () => {
+    const res = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Credit Test Customer',
+        customerPhone: '919999999999',
+        paymentType: 'Credit',
+        paidAmount: 50,
+        dueDate: new Date(Date.now() + 86400000).toISOString(), // 1 day in future
+        items: [
+          { productName: 'Credit Item 1', price: 100, quantity: 2, gst: 18 } // Total = 200 + 36 = 236
+        ]
+      });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.paymentType).toBe('Credit');
+    expect(res.body.total).toBe(236);
+    expect(res.body.paidAmount).toBe(50);
+    expect(res.body.remainingAmount).toBe(186);
+    expect(res.body.status).toBe('partial');
+    expect(res.body.dueDate).toBeDefined();
+    expect(res.body.payments.length).toBe(1);
+    expect(res.body.payments[0].amount).toBe(50);
+
+    creditBillId = res.body._id;
+  });
+
+  it('should return credit stats containing the outstanding credit amount', async () => {
+    const res = await request(app)
+      .get('/api/bills/credit/stats')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.totalCreditOutstanding).toBe(186);
+    expect(res.body.pendingCustomersCount).toBe(1);
+  });
+
+  it('should update remainingAmount and status when partial payment is recorded', async () => {
+    const res = await request(app)
+      .post(`/api/bills/${creditBillId}/payments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        amount: 86,
+        note: 'Partial pay'
+      });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.paidAmount).toBe(136);
+    expect(res.body.remainingAmount).toBe(100);
+    expect(res.body.status).toBe('partial');
+    expect(res.body.payments.length).toBe(2);
+    expect(res.body.payments[1].amount).toBe(86);
+    expect(res.body.payments[1].note).toBe('Partial pay');
+  });
+
+  it('should update status to paid when remainingAmount reaches 0', async () => {
+    const res = await request(app)
+      .post(`/api/bills/${creditBillId}/payments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        amount: 100,
+        note: 'Final pay'
+      });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.paidAmount).toBe(236);
+    expect(res.body.remainingAmount).toBe(0);
+    expect(res.body.status).toBe('paid');
+    expect(res.body.payments.length).toBe(3);
+    expect(res.body.payments[2].amount).toBe(100);
+  });
+
+  it('should prevent User B from viewing or paying off User A\'s credit bill (user data isolation)', async () => {
+    // Attempt to view stats from second user token
+    const statsRes = await request(app)
+      .get('/api/bills/credit/stats')
+      .set('Authorization', `Bearer ${secondUserToken}`);
+    expect(statsRes.statusCode).toBe(200);
+    expect(statsRes.body.totalCreditOutstanding).toBe(0); // isolated user has no credit
+
+    // Attempt to record payment on User A's bill with User B's token
+    const payRes = await request(app)
+      .post(`/api/bills/${creditBillId}/payments`)
+      .set('Authorization', `Bearer ${secondUserToken}`)
+      .send({
+        amount: 50
+      });
+    expect(payRes.statusCode).toBe(404); // Should not find the bill
+  });
+});

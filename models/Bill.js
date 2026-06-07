@@ -44,6 +44,45 @@ const billSchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  paymentType: {
+    type: String,
+    enum: ['Paid', 'Credit'],
+    default: 'Paid',
+  },
+  dueDate: {
+    type: Date,
+    default: null,
+  },
+  paidAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  remainingAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'partial', 'paid'],
+    default: 'paid',
+  },
+  payments: [{
+    amount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    note: {
+      type: String,
+      default: '',
+    },
+    date: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
 }, { timestamps: true });
 
 module.exports = mongoose.model('Bill', billSchema);
