@@ -30,13 +30,43 @@ const sendOtpEmail = async (email, otp, type = 'verify') => {
     </div>
   `;
 
-  // 1. Try sending via Resend API (HTTP POST over Port 443 - 100% reliable on Railway Hobby plans)
+  // 1. Try Nodemailer SMTP if credentials are fully configured
+  if (user && pass && host) {
+    try {
+      console.log(`[SMTP] Sending ${type} email to: ${email}`);
+      const transporter = nodemailer.createTransport({
+        host,
+        port: Number(port),
+        secure: Number(port) === 465, // true for 465, false for other ports
+        auth: {
+          user,
+          pass,
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from,
+        to: email,
+        subject,
+        text,
+        html,
+      });
+
+      console.log(`[SMTP] Email sent successfully to ${email}. MessageID: ${info.messageId}`);
+      return true;
+    } catch (error) {
+      console.error(`[SMTP] Failed to send email to ${email}:`, error);
+      // Fallback to Resend or Sandbox if SMTP fails
+    }
+  }
+
+  // 2. Try sending via Resend API (HTTP POST over Port 443)
   if (resendApiKey) {
     try {
       console.log(`[Resend] Sending ${type} email to: ${email}`);
       const resendFrom = process.env.RESEND_FROM || 'onboarding@resend.dev';
       
-      const response = await fetch('https://api.resend.com/emails', {
+      let response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -51,7 +81,28 @@ const sendOtpEmail = async (email, otp, type = 'verify') => {
         })
       });
 
-      const data = await response.json();
+      let data = await response.json();
+
+      // Defensive Retry: If custom sender fails, retry using verified onboarding@resend.dev fallback
+      if (!response.ok && resendFrom !== 'onboarding@resend.dev') {
+        console.warn(`[Resend] Failed with custom sender "${resendFrom}". Retrying with "onboarding@resend.dev"...`);
+        response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${resendApiKey}`
+          },
+          body: JSON.stringify({
+            from: 'onboarding@resend.dev',
+            to: email,
+            subject,
+            text,
+            html
+          })
+        });
+        data = await response.json();
+      }
+
       if (response.ok) {
         console.log(`[Resend] Email sent successfully to ${email}. ID: ${data.id}`);
         return true;
@@ -63,53 +114,25 @@ const sendOtpEmail = async (email, otp, type = 'verify') => {
     }
   }
 
-  // 2. Fallback to Nodemailer SMTP (standard SMTP)
-  if (!user || !pass) {
-    console.log('\n==================================================');
-    console.log(`[SANDBOX MODE] Email to: ${email}`);
-    console.log(`[SANDBOX MODE] Type: ${type}`);
-    console.log(`[SANDBOX MODE] Your 6-Digit OTP is: ${otp}`);
-    console.log('==================================================\n');
+  // 3. Fallback to Sandbox Mode (local console & log file)
+  console.log('\n==================================================');
+  console.log(`[SANDBOX MODE] Email to: ${email}`);
+  console.log(`[SANDBOX MODE] Type: ${type}`);
+  console.log(`[SANDBOX MODE] Your 6-Digit OTP is: ${otp}`);
+  console.log('==================================================\n');
 
-    // Also write to a local log file in the project root so user can easily read it
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const logPath = path.join(__dirname, '../otp-debug.log');
-      const logMessage = `[${new Date().toLocaleString()}] Email: ${email} | Type: ${type} | OTP: ${otp}\n`;
-      fs.appendFileSync(logPath, logMessage);
-    } catch (fsErr) {
-      console.error('Failed to write OTP to debug file:', fsErr.message);
-    }
-
-    return true;
-  }
-
+  // Also write to a local log file in the project root so user can easily read it
   try {
-    const transporter = nodemailer.createTransport({
-      host,
-      port: Number(port),
-      secure: Number(port) === 465, // true for 465, false for other ports
-      auth: {
-        user,
-        pass,
-      },
-    });
-
-    const info = await transporter.sendMail({
-      from,
-      to: email,
-      subject,
-      text,
-      html,
-    });
-
-    console.log(`[SMTP] Email sent successfully to ${email}. MessageID: ${info.messageId}`);
-    return true;
-  } catch (error) {
-    console.error(`[SMTP] Failed to send email to ${email}:`, error);
-    return false;
+    const fs = require('fs');
+    const path = require('path');
+    const logPath = path.join(__dirname, '../otp-debug.log');
+    const logMessage = `[${new Date().toLocaleString()}] Email: ${email} | Type: ${type} | OTP: ${otp}\n`;
+    fs.appendFileSync(logPath, logMessage);
+  } catch (fsErr) {
+    console.error('Failed to write OTP to debug file:', fsErr.message);
   }
+
+  return true;
 };
 
 module.exports = { sendOtpEmail };
