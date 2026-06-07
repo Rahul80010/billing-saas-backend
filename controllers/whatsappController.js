@@ -1,5 +1,6 @@
 const axios = require('axios');
 const WhatsAppConnection = require('../models/WhatsAppConnection');
+const User = require('../models/User');
 const { encrypt, decrypt } = require('../services/encryptionService');
 const { sendWhatsAppMessage } = require('../services/whatsappService');
 
@@ -152,6 +153,7 @@ const getConnectionStatus = async (req, res) => {
     if (connection) {
       res.status(200).json({
         connected: true,
+        type: 'automated',
         connection: {
           wabaId: connection.wabaId,
           phoneNumberId: connection.phoneNumberId,
@@ -159,6 +161,19 @@ const getConnectionStatus = async (req, res) => {
           businessName: connection.businessName,
           businessId: connection.businessId,
           connectedAt: connection.connectedAt,
+        }
+      });
+    } else if (req.user.whatsappToken && req.user.whatsappPhoneNumberId) {
+      res.status(200).json({
+        connected: true,
+        type: 'manual',
+        connection: {
+          wabaId: 'Manual Config',
+          phoneNumberId: req.user.whatsappPhoneNumberId,
+          phoneNumber: req.user.businessPhone || 'N/A',
+          businessName: req.user.businessName || req.user.name || 'Mohuri Store',
+          businessId: 'Manual',
+          connectedAt: req.user.updatedAt,
         }
       });
     } else {
@@ -177,7 +192,18 @@ const getConnectionStatus = async (req, res) => {
 const disconnectWhatsApp = async (req, res) => {
   try {
     const result = await WhatsAppConnection.deleteOne({ userId: req.user._id });
-    if (result.deletedCount > 0) {
+    
+    // Also clear manual config in User model
+    const user = await User.findById(req.user._id);
+    let clearedManual = false;
+    if (user && (user.whatsappToken || user.whatsappPhoneNumberId)) {
+      user.whatsappToken = '';
+      user.whatsappPhoneNumberId = '';
+      await user.save();
+      clearedManual = true;
+    }
+
+    if (result.deletedCount > 0 || clearedManual) {
       res.status(200).json({ success: true, message: 'WhatsApp connection disconnected successfully.' });
     } else {
       res.status(404).json({ message: 'No active WhatsApp connection found to disconnect.' });
@@ -201,16 +227,27 @@ const testEmbeddedConnection = async (req, res) => {
 
   try {
     const connection = await WhatsAppConnection.findOne({ userId: req.user._id });
-    if (!connection) {
+    
+    let token = '';
+    let phoneNumberId = '';
+    let isManual = false;
+
+    if (connection) {
+      token = decrypt(connection.accessToken);
+      phoneNumberId = connection.phoneNumberId;
+    } else if (req.user.whatsappToken && req.user.whatsappPhoneNumberId) {
+      token = req.user.whatsappToken;
+      phoneNumberId = req.user.whatsappPhoneNumberId;
+      isManual = true;
+    } else {
       return res.status(400).json({ message: 'No active WhatsApp connection found. Connect your account first.' });
     }
 
-    const decryptedToken = decrypt(connection.accessToken);
-    const testMessage = `Hello! This is a test message from your SaaS billing application Mohuri.\n\nYour WhatsApp Embedded Signup connection is fully verified and active! 🎉\n\nWABA ID: ${connection.wabaId}\nPhone ID: ${connection.phoneNumberId}`;
+    const testMessage = `Hello! This is a test message from your SaaS billing application Mohuri.\n\nYour WhatsApp connection is fully verified and active! 🎉\n\nConnection Type: ${isManual ? 'Manual' : 'Embedded Signup'}\nPhone ID: ${phoneNumberId}`;
 
     const dispatchResult = await sendWhatsAppMessage({
-      phoneNumberId: connection.phoneNumberId,
-      accessToken: decryptedToken,
+      phoneNumberId,
+      accessToken: token,
       to,
       message: testMessage,
     });

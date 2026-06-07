@@ -156,7 +156,7 @@ describe('WhatsApp API & Embedded Signup', () => {
         to: '919876543210',
         type: 'text',
         text: expect.objectContaining({
-          body: expect.stringContaining('Your WhatsApp Embedded Signup connection is fully verified')
+          body: expect.stringContaining('Your WhatsApp connection is fully verified')
         })
       }),
       expect.any(Object)
@@ -186,6 +186,74 @@ describe('WhatsApp API & Embedded Signup', () => {
     expect(conn).toBeNull();
 
     // Verify status returns disconnected
+    const statusRes = await request(app)
+      .get('/api/whatsapp/status')
+      .set('Authorization', `Bearer ${token}`);
+    expect(statusRes.statusCode).toBe(200);
+    expect(statusRes.body.connected).toBe(false);
+  });
+
+  it('should save manual credentials and return connected status as manual', async () => {
+    const saveRes = await request(app)
+      .put('/api/auth/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        whatsappToken: 'manual_token_abc',
+        whatsappPhoneNumberId: 'manual_id_def',
+        businessPhone: '+91 99999-88888'
+      });
+    expect(saveRes.statusCode).toBe(200);
+    expect(saveRes.body.whatsappToken).toBe('manual_token_abc');
+    expect(saveRes.body.whatsappPhoneNumberId).toBe('manual_id_def');
+
+    const statusRes = await request(app)
+      .get('/api/whatsapp/status')
+      .set('Authorization', `Bearer ${token}`);
+    expect(statusRes.statusCode).toBe(200);
+    expect(statusRes.body.connected).toBe(true);
+    expect(statusRes.body.type).toBe('manual');
+    expect(statusRes.body.connection.phoneNumberId).toBe('manual_id_def');
+    expect(statusRes.body.connection.wabaId).toBe('Manual Config');
+  });
+
+  it('should trigger test connection diagnostic message successfully using manual credentials', async () => {
+    axios.post.mockResolvedValue({
+      status: 200,
+      data: {
+        messages: [{ id: 'mock_manual_msg_id' }]
+      }
+    });
+
+    const res = await request(app)
+      .post('/api/whatsapp/test-embedded')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ to: '919876543210' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.message).toContain('mock_manual_msg_id');
+
+    expect(axios.post).toHaveBeenCalledWith(
+      expect.stringContaining('/manual_id_def/messages'),
+      expect.objectContaining({
+        messaging_product: 'whatsapp',
+        to: '919876543210',
+        text: expect.objectContaining({
+          body: expect.stringContaining('Connection Type: Manual')
+        })
+      }),
+      expect.any(Object)
+    );
+  });
+
+  it('should disconnect manual configuration successfully', async () => {
+    const res = await request(app)
+      .delete('/api/whatsapp/disconnect')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+
     const statusRes = await request(app)
       .get('/api/whatsapp/status')
       .set('Authorization', `Bearer ${token}`);
