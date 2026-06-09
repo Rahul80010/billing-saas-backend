@@ -64,6 +64,7 @@ router.post('/test-email', async (req, res) => {
       host,
       port: Number(port),
       secure: isSecure,
+      family: 4, // Force IPv4 to prevent ENETUNREACH issues on cloud hosting (like Railway)
       auth: {
         user,
         pass,

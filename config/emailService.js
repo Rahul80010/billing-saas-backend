@@ -38,6 +38,7 @@ const sendOtpEmail = async (email, otp, type = 'verify') => {
         host,
         port: Number(port),
         secure: Number(port) === 465, // true for 465, false for other ports
+        family: 4, // Force IPv4 to prevent ENETUNREACH issues on cloud hosting (like Railway)
         auth: {
           user,
           pass,
