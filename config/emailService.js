@@ -1,4 +1,17 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns').promises;
+
+// Resolve host to IPv4 address dynamically to prevent IPv6 ENETUNREACH issues on cloud hosts like Railway
+const resolveIPv4 = async (hostname) => {
+  try {
+    const result = await dns.lookup(hostname, { family: 4 });
+    console.log(`[DNS] Resolved ${hostname} to IPv4: ${result.address}`);
+    return result.address;
+  } catch (error) {
+    console.warn(`[DNS] Failed to resolve ${hostname} to IPv4, using original hostname:`, error.message);
+    return hostname;
+  }
+};
 
 const sendOtpEmail = async (email, otp, type = 'verify') => {
   const resendApiKey = process.env.RESEND_API_KEY;
@@ -34,15 +47,18 @@ const sendOtpEmail = async (email, otp, type = 'verify') => {
   if (user && pass && host) {
     try {
       console.log(`[SMTP] Sending ${type} email to: ${email}`);
+      const resolvedHost = await resolveIPv4(host);
       const transporter = nodemailer.createTransport({
-        host,
+        host: resolvedHost,
         port: Number(port),
         secure: Number(port) === 465, // true for 465, false for other ports
-        family: 4, // Force IPv4 to prevent ENETUNREACH issues on cloud hosting (like Railway)
         auth: {
           user,
           pass,
         },
+        tls: {
+          servername: host, // Critical for certificate validation against original hostname
+        }
       });
 
       const info = await transporter.sendMail({

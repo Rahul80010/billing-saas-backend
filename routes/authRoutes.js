@@ -59,15 +59,26 @@ router.post('/test-email', async (req, res) => {
   }
 
   try {
+    const dns = require('dns').promises;
+    let resolvedHost = host;
+    try {
+      const lookupResult = await dns.lookup(host, { family: 4 });
+      resolvedHost = lookupResult.address;
+    } catch (dnsErr) {
+      console.warn('DNS lookup failed in test-email:', dnsErr.message);
+    }
+
     const isSecure = Number(port) === 465;
     const transporter = nodemailer.createTransport({
-      host,
+      host: resolvedHost,
       port: Number(port),
       secure: isSecure,
-      family: 4, // Force IPv4 to prevent ENETUNREACH issues on cloud hosting (like Railway)
       auth: {
         user,
         pass,
+      },
+      tls: {
+        servername: host,
       },
       // Increase timeout to 10 seconds to fail faster if blocked
       connectionTimeout: 10000,
