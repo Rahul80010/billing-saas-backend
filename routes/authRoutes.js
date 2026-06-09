@@ -38,6 +38,18 @@ router.get('/debug-smtp', (req, res) => {
   });
 });
 
+// Temporary endpoint to check live code
+router.get('/debug-code', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  try {
+    const code = fs.readFileSync(path.join(__dirname, '../config/emailService.js'), 'utf8');
+    res.send(code);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
 // Diagnostic route to synchronously test email sending and catch SMTP errors
 router.post('/test-email', async (req, res) => {
   const { email, host: overrideHost, port: overridePort, user: overrideUser, pass: overridePass } = req.body;
