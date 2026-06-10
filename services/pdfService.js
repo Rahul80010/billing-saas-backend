@@ -1,4 +1,5 @@
 const PDFDocument = require('pdfkit');
+const path = require('path');
 
 /**
  * Generates an elegant print-friendly PDF invoice from a bill and pipes it to the HTTP response stream.
@@ -8,6 +9,12 @@ const PDFDocument = require('pdfkit');
  */
 const generateInvoicePdf = (bill, businessConfig, res) => {
   const doc = new PDFDocument({ margin: 50 });
+
+  // Register Roboto fonts for native Indian Rupee symbol (₹) support
+  const fontsDir = path.join(__dirname, '..', 'assets', 'fonts');
+  doc.registerFont('Roboto', path.join(fontsDir, 'Roboto-Regular.ttf'));
+  doc.registerFont('Roboto-Bold', path.join(fontsDir, 'Roboto-Bold.ttf'));
+  doc.registerFont('Roboto-Italic', path.join(fontsDir, 'Roboto-Italic.ttf'));
 
   // Pipe the document directly to the response
   doc.pipe(res);
@@ -50,7 +57,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   doc
     .fillColor(primaryColor)
     .fontSize(18)
-    .font('Helvetica-Bold')
+    .font('Roboto-Bold')
     .text(bName, startX, 45);
 
   let currentY = 65;
@@ -59,7 +66,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     doc
       .fillColor(secondaryText)
       .fontSize(8)
-      .font('Helvetica')
+      .font('Roboto')
       .text(bAddress, startX, currentY, { width: 250 });
     // Approx height adjustment for address line wrap
     currentY += bAddress.length > 40 ? 22 : 12;
@@ -69,7 +76,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     doc
       .fillColor(secondaryText)
       .fontSize(8)
-      .font('Helvetica')
+      .font('Roboto')
       .text(`Phone: ${bPhone}`, startX, currentY);
     currentY += 12;
   }
@@ -78,7 +85,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     doc
       .fillColor(secondaryText)
       .fontSize(8)
-      .font('Helvetica')
+      .font('Roboto')
       .text(`GSTIN: ${bGstin}`, startX, currentY);
     currentY += 12;
   }
@@ -88,9 +95,9 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   doc
     .fillColor(textColor)
     .fontSize(9)
-    .font('Helvetica-Bold')
+    .font('Roboto-Bold')
     .text('INVOICE DETAIL', 400, 45, { align: 'right' })
-    .font('Helvetica')
+    .font('Roboto')
     .fillColor(secondaryText)
     .text(`Invoice ID: ${invoiceId}`, 400, 60, { align: 'right' })
     .text(`Date: ${new Date(bill.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}`, 400, 72, { align: 'right' });
@@ -109,11 +116,11 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   doc
     .fillColor(textColor)
     .fontSize(10)
-    .font('Helvetica-Bold')
+    .font('Roboto-Bold')
     .text('BILL TO:', 50, billingInfoY);
  
   doc
-    .font('Helvetica')
+    .font('Roboto')
     .fontSize(10)
     .fillColor(textColor)
     .text(`Customer Name: ${bill.customerName}`, 50, billingInfoY + 18)
@@ -125,7 +132,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   // Table Headers
   doc
     .fillColor(primaryColor)
-    .font('Helvetica-Bold')
+    .font('Roboto-Bold')
     .fontSize(9);
  
   doc.text('Item Description', 50, tableTop);
@@ -144,7 +151,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
 
   // Table Body Rows
   let y = tableTop + 25;
-  doc.font('Helvetica').fontSize(9).fillColor(textColor);
+  doc.font('Roboto').fontSize(9).fillColor(textColor);
 
   bill.items.forEach((item) => {
     const qty = Number(item.quantity);
@@ -185,7 +192,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   if (bill.paymentType === 'Credit') {
     doc
       .fillColor(textColor)
-      .font('Helvetica-Bold')
+      .font('Roboto-Bold')
       .fontSize(10)
       .text(`Total Bill Amount: ₹${Number(bill.total).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
     
@@ -193,7 +200,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     
     doc
       .fillColor('#10b981') // Green for paid
-      .font('Helvetica-Bold')
+      .font('Roboto-Bold')
       .fontSize(10)
       .text(`Amount Paid: ₹${Number(bill.paidAmount || 0).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
     
@@ -201,7 +208,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     
     doc
       .fillColor('#d97706') // Amber for remaining balance / udhaar
-      .font('Helvetica-Bold')
+      .font('Roboto-Bold')
       .fontSize(12)
       .text(`Remaining Balance (Udhaar): ₹${Number(bill.remainingAmount || 0).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
 
@@ -209,7 +216,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       totalsTop += 18;
       doc
         .fillColor(secondaryText)
-        .font('Helvetica-Oblique')
+        .font('Roboto-Italic')
         .fontSize(9)
         .text(`Payment Due Date: ${new Date(bill.dueDate).toLocaleDateString()}`, 50, totalsTop, { align: 'right', width: 500 });
     }
@@ -217,7 +224,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     // Regular 'Paid' bill
     doc
       .fillColor(primaryColor)
-      .font('Helvetica-Bold')
+      .font('Roboto-Bold')
       .fontSize(14)
       .text(`Grand Total (Paid): ₹${Number(bill.total).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
   }
@@ -225,7 +232,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   // 5. Invoice Footer
   doc
     .fillColor(secondaryText)
-    .font('Helvetica-Oblique')
+    .font('Roboto-Italic')
     .fontSize(9)
     .text(bFooter, 50, totalsTop + 50, { align: 'center', width: 500 });
 
