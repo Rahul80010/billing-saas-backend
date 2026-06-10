@@ -630,5 +630,50 @@ describe('Credit / Udhaar API', () => {
     expect(b2.status).toBe('partial');
     expect(b2.remainingAmount).toBe(150);
   });
+
+  it('should delete a bill and restore product stocks', async () => {
+    const Product = mongoose.model('Product');
+    // 1. Create a product with specific stock
+    const prodRes = await request(app)
+      .post('/api/products')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Deductible Product',
+        price: 50,
+        gst: 0,
+        stock: 10
+      });
+    expect(prodRes.statusCode).toBe(201);
+    
+    // 2. Create a bill with that product
+    const billRes = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Stock Tester',
+        customerPhone: '9876543210',
+        paymentType: 'Paid',
+        items: [{ productName: 'Deductible Product', price: 50, quantity: 3, gst: 0 }]
+      });
+    expect(billRes.statusCode).toBe(201);
+    
+    // 3. Verify stock was deducted (10 - 3 = 7)
+    let p = await Product.findById(prodRes.body._id);
+    expect(p.stock).toBe(7);
+    
+    // 4. Delete the bill
+    const deleteRes = await request(app)
+      .delete(`/api/bills/${billRes.body._id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(deleteRes.statusCode).toBe(200);
+    
+    // 5. Verify the bill is deleted
+    const deletedBill = await Bill.findById(billRes.body._id);
+    expect(deletedBill).toBeNull();
+    
+    // 6. Verify stock was restored back to 10
+    p = await Product.findById(prodRes.body._id);
+    expect(p.stock).toBe(10);
+  });
 });
 

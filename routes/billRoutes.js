@@ -7,6 +7,7 @@ const {
   getCreditStats,
   recordPayment,
   recordCustomerPayment,
+  deleteBill,
 } = require('../controllers/billController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -21,5 +22,6 @@ router.post('/customer/:phone/payments', recordCustomerPayment);
 router.post('/:id/payments', recordPayment);
 
 router.route('/').get(getBills).post(createBill);
+router.route('/:id').delete(deleteBill);
 
 module.exports = router;

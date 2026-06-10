@@ -349,6 +349,35 @@ const recordCustomerPayment = async (req, res) => {
   }
 };
 
+// @desc    Delete a bill and restore stock
+// @route   DELETE /api/bills/:id
+// @access  Private
+const deleteBill = async (req, res) => {
+  try {
+    const bill = await Bill.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!bill) {
+      return res.status(404).json({ message: 'Bill not found' });
+    }
+
+    // Restore stock for all products in the bill
+    try {
+      for (const item of bill.items) {
+        await Product.findOneAndUpdate(
+          { userId: req.user._id, name: item.productName },
+          { $inc: { stock: item.quantity } }
+        );
+      }
+    } catch (stockErr) {
+      console.error('Error restoring stock on bill deletion:', stockErr);
+    }
+
+    await Bill.deleteOne({ _id: bill._id });
+    res.json({ message: 'Bill deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getBills,
   createBill,
@@ -356,4 +385,6 @@ module.exports = {
   getCreditStats,
   recordPayment,
   recordCustomerPayment,
+  deleteBill,
 };
+
