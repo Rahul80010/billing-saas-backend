@@ -280,10 +280,80 @@ const recordPayment = async (req, res) => {
   }
 };
 
+// @desc    Record a bulk payment for a customer (settles oldest bills first)
+// @route   POST /api/bills/customer/:phone/payments
+// @access  Private
+const recordCustomerPayment = async (req, res) => {
+  const { amount, note } = req.body;
+  let paymentAmount = Number(amount);
+  const phone = req.params.phone;
+
+  if (isNaN(paymentAmount) || paymentAmount <= 0) {
+    return res.status(400).json({ message: 'Invalid payment amount' });
+  }
+
+  try {
+    // Find all pending/partial credit bills for this customer and user
+    const bills = await Bill.find({
+      userId: req.user._id,
+      customerPhone: phone,
+      paymentType: 'Credit',
+      status: { $in: ['pending', 'partial'] }
+    }).sort({ createdAt: 1 }); // oldest first
+
+    if (bills.length === 0) {
+      return res.status(404).json({ message: 'No pending credit invoices found for this customer' });
+    }
+
+    const modifiedBills = [];
+    const originalPaymentAmount = paymentAmount;
+
+    for (const bill of bills) {
+      if (paymentAmount <= 0) break;
+
+      const toPay = Math.min(paymentAmount, bill.remainingAmount);
+      paymentAmount = Number((paymentAmount - toPay).toFixed(2));
+
+      bill.paidAmount = Number((bill.paidAmount + toPay).toFixed(2));
+      bill.remainingAmount = Number((bill.total - bill.paidAmount).toFixed(2));
+
+      if (bill.remainingAmount <= 0) {
+        bill.status = 'paid';
+        bill.remainingAmount = 0;
+      } else {
+        bill.status = 'partial';
+      }
+
+      bill.payments.push({
+        amount: toPay,
+        note: note ? `${note} (Bulk Settlement)` : 'Bulk Customer Settlement',
+        date: new Date(),
+      });
+
+      modifiedBills.push(bill);
+    }
+
+    // Save all modified bills
+    for (const bill of modifiedBills) {
+      await bill.save();
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully settled ₹${(originalPaymentAmount - paymentAmount).toFixed(2)} across ${modifiedBills.length} invoice(s).`,
+      remainingPayment: paymentAmount,
+      settledInvoicesCount: modifiedBills.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getBills,
   createBill,
   getBillPdf,
   getCreditStats,
   recordPayment,
+  recordCustomerPayment,
 };

@@ -180,13 +180,47 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     .stroke();
 
   // 4. Totals Block
-  const totalsTop = y + 15;
+  let totalsTop = y + 15;
   
-  doc
-    .fillColor(primaryColor)
-    .font('Helvetica-Bold')
-    .fontSize(14)
-    .text(`Grand Total: ₹${Number(bill.total).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
+  if (bill.paymentType === 'Credit') {
+    doc
+      .fillColor(textColor)
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .text(`Total Bill Amount: ₹${Number(bill.total).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
+    
+    totalsTop += 15;
+    
+    doc
+      .fillColor('#10b981') // Green for paid
+      .font('Helvetica-Bold')
+      .fontSize(10)
+      .text(`Amount Paid: ₹${Number(bill.paidAmount || 0).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
+    
+    totalsTop += 15;
+    
+    doc
+      .fillColor('#d97706') // Amber for remaining balance / udhaar
+      .font('Helvetica-Bold')
+      .fontSize(12)
+      .text(`Remaining Balance (Udhaar): ₹${Number(bill.remainingAmount || 0).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
+
+    if (bill.dueDate) {
+      totalsTop += 18;
+      doc
+        .fillColor(secondaryText)
+        .font('Helvetica-Oblique')
+        .fontSize(9)
+        .text(`Payment Due Date: ${new Date(bill.dueDate).toLocaleDateString()}`, 50, totalsTop, { align: 'right', width: 500 });
+    }
+  } else {
+    // Regular 'Paid' bill
+    doc
+      .fillColor(primaryColor)
+      .font('Helvetica-Bold')
+      .fontSize(14)
+      .text(`Grand Total (Paid): ₹${Number(bill.total).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
+  }
 
   // 5. Invoice Footer
   doc

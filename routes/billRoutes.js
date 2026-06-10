@@ -6,6 +6,7 @@ const {
   getBillPdf,
   getCreditStats,
   recordPayment,
+  recordCustomerPayment,
 } = require('../controllers/billController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -16,6 +17,7 @@ router.get('/:id/pdf', getBillPdf);
 router.use(protect);
 
 router.get('/credit/stats', getCreditStats);
+router.post('/customer/:phone/payments', recordCustomerPayment);
 router.post('/:id/payments', recordPayment);
 
 router.route('/').get(getBills).post(createBill);

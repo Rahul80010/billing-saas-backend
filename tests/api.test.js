@@ -2,6 +2,7 @@ const request = require('supertest');
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const app = require('../server');
+const Bill = require('../models/Bill');
 
 jest.setTimeout(60000); // 60 seconds
 
@@ -579,4 +580,55 @@ describe('Credit / Udhaar API', () => {
       });
     expect(payRes.statusCode).toBe(404); // Should not find the bill
   });
+
+  it('should support customer-level bulk payment recording, settling oldest bills first', async () => {
+    // 1. Create two credit bills for the same customer phone number
+    const phone = '9876543210';
+    
+    const bill1 = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Bulk Customer',
+        customerPhone: phone,
+        paymentType: 'Credit',
+        items: [{ productName: 'Item A', price: 100, quantity: 2, gst: 0 }] // Total = 200
+      });
+
+    const bill2 = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Bulk Customer',
+        customerPhone: phone,
+        paymentType: 'Credit',
+        items: [{ productName: 'Item B', price: 300, quantity: 1, gst: 0 }] // Total = 300
+      });
+
+    expect(bill1.statusCode).toBe(201);
+    expect(bill2.statusCode).toBe(201);
+
+    // 2. Settle ₹350 at customer level (should fully pay bill1 [₹200] and partially pay bill2 [₹150 of ₹300, leaving ₹150])
+    const payRes = await request(app)
+      .post(`/api/bills/customer/${phone}/payments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        amount: 350,
+        note: 'Customer bulk pay'
+      });
+
+    expect(payRes.statusCode).toBe(200);
+    expect(payRes.body.success).toBe(true);
+    expect(payRes.body.settledInvoicesCount).toBe(2);
+
+    // 3. Fetch both bills to verify statuses
+    const b1 = await Bill.findById(bill1.body._id);
+    const b2 = await Bill.findById(bill2.body._id);
+
+    expect(b1.status).toBe('paid');
+    expect(b1.remainingAmount).toBe(0);
+    expect(b2.status).toBe('partial');
+    expect(b2.remainingAmount).toBe(150);
+  });
 });
+
