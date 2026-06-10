@@ -38,6 +38,10 @@ const billSchema = new mongoose.Schema({
     required: false,
     index: true,
   },
+  customerAddress: {
+    type: String,
+    required: false,
+  },
   items: [itemSchema],
   total: {
     type: Number,

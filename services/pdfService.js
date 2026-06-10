@@ -126,8 +126,15 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     .text(`Customer Name: ${bill.customerName}`, 50, billingInfoY + 18)
     .text(`Contact Phone: ${bill.customerPhone || 'N/A'}`, 50, billingInfoY + 33);
  
+  let addressOffsetY = 33;
+  if (bill.customerAddress) {
+    doc.text(`Customer Address: ${bill.customerAddress}`, 50, billingInfoY + 48, { width: 300 });
+    const addressLinesCount = Math.ceil(bill.customerAddress.length / 50);
+    addressOffsetY += 15 * addressLinesCount;
+  }
+
   // 3. Items Table Section
-  const tableTop = billingInfoY + 60;
+  const tableTop = billingInfoY + addressOffsetY + 25;
   
   // Table Headers
   doc

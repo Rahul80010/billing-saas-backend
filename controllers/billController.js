@@ -46,7 +46,7 @@ const getBills = async (req, res) => {
 // @route   POST /api/bills
 // @access  Private
 const createBill = async (req, res) => {
-  const { customerName, customerPhone, items, paymentType, dueDate, paidAmount } = req.body;
+  const { customerName, customerPhone, customerAddress, items, paymentType, dueDate, paidAmount } = req.body;
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: 'No valid bill items provided' });
@@ -115,6 +115,7 @@ const createBill = async (req, res) => {
       userId: req.user._id,
       customerName,
       customerPhone,
+      customerAddress,
       items: processedItems,
       total: finalTotal,
       paymentType: paymentType || 'Paid',

@@ -361,6 +361,34 @@ describe('Bills API', () => {
     expect(queryRes.body.length).toBe(1);
     expect(queryRes.body[0].customerPhone).toBe(uniquePhone);
   });
+
+  it('should create a bill with customerAddress and customer with address', async () => {
+    const address = '123 Test Street, Delhi';
+    const res = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Address Test Customer',
+        customerPhone: '9990002222',
+        customerAddress: address,
+        items: [
+          { productName: 'Address Product', price: 100, quantity: 1, gst: 10 }
+        ]
+      });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.customerAddress).toBe(address);
+
+    const custRes = await request(app)
+      .post('/api/customers')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Address Test Customer',
+        phone: '9990002222',
+        address: address
+      });
+    expect(custRes.statusCode).toBe(201);
+    expect(custRes.body.address).toBe(address);
+  });
 });
 
 describe('Real User Flow', () => {

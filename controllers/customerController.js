@@ -16,7 +16,7 @@ const getCustomers = async (req, res) => {
 // @route   POST /api/customers
 // @access  Private
 const createCustomer = async (req, res) => {
-  const { name, phone } = req.body;
+  const { name, phone, address } = req.body;
 
   try {
     if (!name || !phone) {
@@ -30,9 +30,17 @@ const createCustomer = async (req, res) => {
     let customer = await Customer.findOne({ userId: req.user._id, phone: cleanPhone });
 
     if (customer) {
-      // If it exists, update the name if it is different, and return the existing record
+      // If it exists, update details if different, and return the existing record
+      let isChanged = false;
       if (customer.name !== cleanName) {
         customer.name = cleanName;
+        isChanged = true;
+      }
+      if (address !== undefined && customer.address !== address.trim()) {
+        customer.address = address.trim();
+        isChanged = true;
+      }
+      if (isChanged) {
         await customer.save();
       }
       return res.status(200).json(customer);
@@ -43,6 +51,7 @@ const createCustomer = async (req, res) => {
       userId: req.user._id,
       name: cleanName,
       phone: cleanPhone,
+      address: address ? address.trim() : '',
     });
 
     const createdCustomer = await customer.save();
@@ -56,7 +65,7 @@ const createCustomer = async (req, res) => {
 // @route   PUT /api/customers/:id
 // @access  Private
 const updateCustomer = async (req, res) => {
-  const { name, phone } = req.body;
+  const { name, phone, address } = req.body;
 
   try {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
@@ -67,6 +76,7 @@ const updateCustomer = async (req, res) => {
     if (customer) {
       customer.name = name !== undefined ? name : customer.name;
       customer.phone = phone !== undefined ? phone : customer.phone;
+      customer.address = address !== undefined ? address : customer.address;
 
       const updatedCustomer = await customer.save();
       res.json(updatedCustomer);
