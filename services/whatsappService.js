@@ -26,6 +26,15 @@ const sendWhatsAppMessage = async ({ phoneNumberId, accessToken, to, message, te
     return { success: false, error: 'Target phone number is empty or invalid.' };
   }
 
+  // Sandbox Mode: if no credentials are configured or using dummy tokens, print to the server logs
+  if (!accessToken || !phoneNumberId || accessToken === 'mock_token' || accessToken.includes('fake')) {
+    console.log('\n==================================================');
+    console.log(`[WHATSAPP SANDBOX MODE] Sending Message to: ${cleanPhone}`);
+    console.log(`Message Content: ${message || JSON.stringify(template)}`);
+    console.log('==================================================\n');
+    return { success: true, sandbox: true, messageId: 'sandbox_msg_id' };
+  }
+
   try {
     const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
     
