@@ -147,7 +147,8 @@ const createBill = async (req, res) => {
     // Trigger WhatsApp bill in the background (non-blocking)
     if (customerPhone) {
       const businessName = req.user.businessName || req.user.name;
-      const pdfLink = `${req.protocol}://${req.get('host')}/api/bills/${createdBill._id}/pdf`;
+      const backendBaseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+      const pdfLink = `${backendBaseUrl}/api/bills/${createdBill._id}/pdf`;
       const userConfig = {
         whatsappToken: req.user.whatsappToken,
         whatsappPhoneNumberId: req.user.whatsappPhoneNumberId
