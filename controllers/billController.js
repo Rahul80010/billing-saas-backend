@@ -187,7 +187,8 @@ const createBill = async (req, res) => {
       const pdfLink = `${backendBaseUrl}/api/bills/${createdBill._id}/pdf`;
       const userConfig = {
         whatsappToken: req.user.whatsappToken,
-        whatsappPhoneNumberId: req.user.whatsappPhoneNumberId
+        whatsappPhoneNumberId: req.user.whatsappPhoneNumberId,
+        whatsappBillTemplate: req.user.whatsappBillTemplate
       };
       sendWhatsappBill(customerPhone, customerName, createdBill.total, pdfLink, businessName, userConfig);
     }
@@ -485,8 +486,14 @@ const sendBillWhatsAppReminder = async (req, res) => {
     const invoiceNo = bill._id.toString().slice(-6).toUpperCase();
     const reminderDateStr = bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('en-IN') : 'N/A';
 
-    // Construct reminder message in Hinglish
-    const message = `Hello ${customerName},\n\nThis is a friendly reminder from *${businessName}* that you have an outstanding balance of *₹${remainingAmount}* for Invoice #INV-${invoiceNo}.\n\n*Reminder Date:* ${reminderDateStr}\n\nPlease settle it soon. Thank you! 🙏`;
+    // Construct reminder message using custom template
+    const template = req.user.whatsappReminderTemplate || `Hello {customerName},\n\nThis is a friendly reminder from *{businessName}* that you have an outstanding balance of *₹{remainingAmount}* for Invoice #INV-{invoiceNo}.\n\n*Reminder Date:* {reminderDate}\n\nPlease settle it soon. Thank you! 🙏`;
+    const message = template
+      .replace(/{customerName}/g, customerName)
+      .replace(/{businessName}/g, businessName)
+      .replace(/{remainingAmount}/g, remainingAmount)
+      .replace(/{invoiceNo}/g, invoiceNo)
+      .replace(/{reminderDate}/g, reminderDateStr);
 
     // Check if WhatsApp is connected
     const connection = await WhatsAppConnection.findOne({ userId: req.user._id });
@@ -558,8 +565,14 @@ const sendCustomerWhatsAppReminder = async (req, res) => {
     const businessName = req.user.businessName || req.user.name || 'MOHURI';
     const reminderDateStr = earliestDueDate ? new Date(earliestDueDate).toLocaleDateString('en-IN') : 'N/A';
 
-    // Construct reminder message
-    const message = `Hello ${customerName},\n\nThis is a friendly reminder from *${businessName}* that you have a total outstanding balance of *₹${outstandingAmt}* across pending invoices.\n\n*Reminder Date:* ${reminderDateStr}\n\nPlease settle it soon. Thank you! 🙏`;
+    // Construct reminder message using custom template
+    const template = req.user.whatsappReminderTemplate || `Hello {customerName},\n\nThis is a friendly reminder from *{businessName}* that you have an outstanding balance of *₹{remainingAmount}* for Invoice #INV-{invoiceNo}.\n\n*Reminder Date:* {reminderDate}\n\nPlease settle it soon. Thank you! 🙏`;
+    const message = template
+      .replace(/{customerName}/g, customerName)
+      .replace(/{businessName}/g, businessName)
+      .replace(/{remainingAmount}/g, outstandingAmt)
+      .replace(/{invoiceNo}/g, 'Multiple')
+      .replace(/{reminderDate}/g, reminderDateStr);
 
     // Check WhatsApp Connection
     const connection = await WhatsAppConnection.findOne({ userId: req.user._id });

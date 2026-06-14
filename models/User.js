@@ -74,6 +74,14 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  whatsappBillTemplate: {
+    type: String,
+    default: 'Hello {customerName}, here is your invoice from {businessName}.\nTotal: ₹{total}',
+  },
+  whatsappReminderTemplate: {
+    type: String,
+    default: 'Hello {customerName},\n\nThis is a friendly reminder from *{businessName}* that you have an outstanding balance of *₹{remainingAmount}* for Invoice #INV-{invoiceNo}.\n\n*Reminder Date:* {reminderDate}\n\nPlease settle it soon. Thank you! 🙏',
+  },
 }, { timestamps: true });
 
 // Pre-save hook to hash password

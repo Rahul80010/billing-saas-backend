@@ -102,7 +102,11 @@ const sendWhatsappBill = async (phone, customerName, total, pdfLink, businessNam
   token = token || process.env.WHATSAPP_TOKEN;
   phoneNumberId = phoneNumberId || process.env.PHONE_NUMBER_ID;
 
-  const caption = `Hello ${customerName}, here is your invoice from ${businessName || 'MOHURI'}.\nTotal: ₹${Number(total).toFixed(2)}`;
+  const template = userConfig.whatsappBillTemplate || 'Hello {customerName}, here is your invoice from {businessName}.\nTotal: ₹{total}';
+  const caption = template
+    .replace(/{customerName}/g, customerName)
+    .replace(/{businessName}/g, businessName || 'MOHURI')
+    .replace(/{total}/g, Number(total).toFixed(2));
 
   // Sandbox Mode: if no credentials are configured, print to the server logs
   if (!token || !phoneNumberId) {

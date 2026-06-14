@@ -435,7 +435,9 @@ describe('User Profile API', () => {
         businessAddress: '123 Test Ave',
         businessPhone: '+91 1111111111',
         gstin: '22GSTIN1234A1Z0',
-        invoiceFooter: 'Mock Footer Note'
+        invoiceFooter: 'Mock Footer Note',
+        whatsappBillTemplate: 'Custom bill template for {customerName} total: {total}',
+        whatsappReminderTemplate: 'Custom reminder for {customerName} outstanding: {remainingAmount} invoice: {invoiceNo}'
       });
     expect(res.statusCode).toBe(200);
     expect(res.body.businessName).toBe('My Awesome Retail Store');
@@ -445,6 +447,8 @@ describe('User Profile API', () => {
     expect(res.body.businessPhone).toBe('+91 1111111111');
     expect(res.body.gstin).toBe('22GSTIN1234A1Z0');
     expect(res.body.invoiceFooter).toBe('Mock Footer Note');
+    expect(res.body.whatsappBillTemplate).toBe('Custom bill template for {customerName} total: {total}');
+    expect(res.body.whatsappReminderTemplate).toBe('Custom reminder for {customerName} outstanding: {remainingAmount} invoice: {invoiceNo}');
 
     // Verify 'me' endpoint returns these updated credentials
     const meRes = await request(app)
@@ -458,6 +462,8 @@ describe('User Profile API', () => {
     expect(meRes.body.businessPhone).toBe('+91 1111111111');
     expect(meRes.body.gstin).toBe('22GSTIN1234A1Z0');
     expect(meRes.body.invoiceFooter).toBe('Mock Footer Note');
+    expect(meRes.body.whatsappBillTemplate).toBe('Custom bill template for {customerName} total: {total}');
+    expect(meRes.body.whatsappReminderTemplate).toBe('Custom reminder for {customerName} outstanding: {remainingAmount} invoice: {invoiceNo}');
   });
 });
 
@@ -783,12 +789,13 @@ describe('Credit / Udhaar API', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         customerName: 'WhatsApp Tester',
-        customerPhone: '9876543210',
+        customerPhone: '9998886665',
         paymentType: 'Credit',
         items: [{ productName: 'Credit Item', price: 100, quantity: 1, gst: 0 }]
       });
     expect(billRes.statusCode).toBe(201);
     const billId = billRes.body._id;
+    const invoiceNo = billId.toString().slice(-6).toUpperCase();
 
     // 2. Request WhatsApp reminder for single bill
     const reminderRes = await request(app)
@@ -798,17 +805,23 @@ describe('Credit / Udhaar API', () => {
     expect(reminderRes.statusCode).toBe(200);
     expect(reminderRes.body.notConnected).toBe(true);
     expect(reminderRes.body.whatsappUrl).toContain('https://api.whatsapp.com/send');
-    expect(reminderRes.body.whatsappUrl).toContain('9876543210');
+    expect(reminderRes.body.whatsappUrl).toContain('9998886665');
+    // Verify custom template parsing
+    const decodedSingleUrl = decodeURIComponent(reminderRes.body.whatsappUrl);
+    expect(decodedSingleUrl).toContain('Custom reminder for WhatsApp Tester outstanding: 100.00 invoice: ' + invoiceNo);
 
     // 3. Request WhatsApp reminder for customer level
     const custReminderRes = await request(app)
-      .post(`/api/bills/customer/9876543210/whatsapp-reminder`)
+      .post(`/api/bills/customer/9998886665/whatsapp-reminder`)
       .set('Authorization', `Bearer ${token}`);
 
     expect(custReminderRes.statusCode).toBe(200);
     expect(custReminderRes.body.notConnected).toBe(true);
     expect(custReminderRes.body.whatsappUrl).toContain('https://api.whatsapp.com/send');
-    expect(custReminderRes.body.whatsappUrl).toContain('9876543210');
+    expect(custReminderRes.body.whatsappUrl).toContain('9998886665');
+    // Verify custom template parsing for bulk customer reminder
+    const decodedCustUrl = decodeURIComponent(custReminderRes.body.whatsappUrl);
+    expect(decodedCustUrl).toContain('Custom reminder for WhatsApp Tester outstanding: 100.00 invoice: Multiple');
   });
 
   it('should allow directly updating the reminder date of a specific bill', async () => {
