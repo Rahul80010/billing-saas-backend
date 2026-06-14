@@ -275,6 +275,7 @@ const getMe = async (req, res) => {
 // @access  Private
 const updateProfile = async (req, res) => {
   const { 
+    name,
     businessName, 
     whatsappToken, 
     whatsappPhoneNumberId,
@@ -289,6 +290,7 @@ const updateProfile = async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (user) {
+      user.name = name !== undefined ? name : user.name;
       user.businessName = businessName !== undefined ? businessName : user.businessName;
       user.whatsappToken = whatsappToken !== undefined ? whatsappToken : user.whatsappToken;
       user.whatsappPhoneNumberId = whatsappPhoneNumberId !== undefined ? whatsappPhoneNumberId : user.whatsappPhoneNumberId;
