@@ -1,10 +1,52 @@
 const Notification = require('../models/Notification');
+const Bill = require('../models/Bill');
 
 // @desc    Get user's notifications
 // @route   GET /api/notifications
 // @access  Private
 const getNotifications = async (req, res) => {
   try {
+    // Check and generate reminder notifications dynamically on request
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Find all pending/partial bills for the user that have a due/reminder date
+      const activeCreditBills = await Bill.find({
+        userId: req.user._id,
+        status: { $in: ['pending', 'partial'] },
+        dueDate: { $ne: null }
+      });
+
+      for (const bill of activeCreditBills) {
+        const reminderDate = new Date(bill.dueDate);
+        reminderDate.setHours(0, 0, 0, 0);
+
+        // If the reminder date has arrived or passed
+        if (reminderDate <= today) {
+          // Check if we already created a reminder notification for this bill
+          // to prevent duplicate spamming
+          const existingNotif = await Notification.findOne({
+            user: req.user._id,
+            type: 'credit',
+            title: 'Payment Reminder Alert',
+            message: new RegExp(bill._id.toString(), 'i')
+          });
+
+          if (!existingNotif) {
+            await Notification.create({
+              user: req.user._id,
+              title: 'Payment Reminder Alert',
+              message: `Udhaar payment reminder for customer "${bill.customerName}" (Invoice: #INV-${bill._id.toString().substring(0, 6).toUpperCase()}, ID: ${bill._id}). Outstanding amount: ₹${bill.remainingAmount}. Set reminder date: ${reminderDate.toLocaleDateString(undefined, { dateStyle: 'medium' })}.`,
+              type: 'credit'
+            });
+          }
+        }
+      }
+    } catch (reminderErr) {
+      console.error('Error checking reminders:', reminderErr);
+    }
+
     const notifications = await Notification.find({ user: req.user._id })
       .sort({ createdAt: -1 })
       .limit(50); // Limit to last 50 notifications to prevent overload
