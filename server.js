@@ -29,6 +29,7 @@ app.use('/api/bills', require('./routes/billRoutes'));
 app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
 app.use('/api/webhooks', require('./routes/webhookRoutes'));
 app.use('/api/crm', require('./routes/crmRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {

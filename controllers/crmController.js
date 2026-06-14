@@ -175,6 +175,20 @@ const createCampaign = async (req, res) => {
     });
 
     const savedCampaign = await campaign.save();
+
+    // Create notification
+    try {
+      const Notification = require('../models/Notification');
+      await Notification.create({
+        user: req.user._id,
+        title: 'WhatsApp Campaign Dispatched',
+        message: `Campaign "${name}" has been processed. Successfully sent to ${successfulSends}/${recipients.length} recipients.`,
+        type: 'campaign'
+      });
+    } catch (notifErr) {
+      console.error('Failed to create campaign notification:', notifErr);
+    }
+
     res.status(201).json(savedCampaign);
   } catch (error) {
     res.status(500).json({ message: error.message });

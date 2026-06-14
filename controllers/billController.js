@@ -132,13 +132,47 @@ const createBill = async (req, res) => {
 
     const createdBill = await bill.save();
 
+    // Create system notification for new bill
+    try {
+      const Notification = require('../models/Notification');
+      await Notification.create({
+        user: req.user._id,
+        title: paymentType === 'Credit' ? 'New Credit Bill (Udhaar)' : 'New Invoice Generated',
+        message: paymentType === 'Credit' 
+          ? `Invoice generated with outstanding credit of ₹${finalRemainingAmount} for customer "${customerName}".`
+          : `Invoice #INV-${createdBill._id.toString().substring(0,6).toUpperCase()} generated for customer "${customerName}" (Amount: ₹${finalTotal}).`,
+        type: paymentType === 'Credit' ? 'credit' : 'system'
+      });
+    } catch (notifErr) {
+      console.error('Failed to create bill notification:', notifErr);
+    }
+
     // Auto deduct product stock in the background (non-blocking)
     try {
       for (const item of processedItems) {
-        await Product.findOneAndUpdate(
+        const updatedProduct = await Product.findOneAndUpdate(
           { userId: req.user._id, name: item.productName },
-          { $inc: { stock: -item.quantity } }
+          { $inc: { stock: -item.quantity } },
+          { new: true }
         );
+        if (updatedProduct) {
+          const Notification = require('../models/Notification');
+          if (updatedProduct.stock <= 0) {
+            await Notification.create({
+              user: req.user._id,
+              title: 'Out of Stock Alert',
+              message: `Product "${updatedProduct.name}" is completely out of stock!`,
+              type: 'stock'
+            });
+          } else if (updatedProduct.stock <= 5) {
+            await Notification.create({
+              user: req.user._id,
+              title: 'Low Stock Warning',
+              message: `Product "${updatedProduct.name}" is running low on stock. Only ${updatedProduct.stock} items left.`,
+              type: 'stock'
+            });
+          }
+        }
       }
     } catch (stockErr) {
       console.error('Error auto-deducting stock:', stockErr);
@@ -276,6 +310,20 @@ const recordPayment = async (req, res) => {
     });
 
     const updatedBill = await bill.save();
+
+    // Create notification
+    try {
+      const Notification = require('../models/Notification');
+      await Notification.create({
+        user: req.user._id,
+        title: 'Payment Recorded',
+        message: `Received payment of ₹${actualPayment} for bill #INV-${bill._id.toString().substring(0,6).toUpperCase()} of customer "${bill.customerName}". Remaining: ₹${bill.remainingAmount}.`,
+        type: 'credit'
+      });
+    } catch (notifErr) {
+      console.error('Failed to create payment notification:', notifErr);
+    }
+
     res.json(updatedBill);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -338,6 +386,20 @@ const recordCustomerPayment = async (req, res) => {
     // Save all modified bills
     for (const bill of modifiedBills) {
       await bill.save();
+    }
+
+    // Create notification
+    try {
+      const Notification = require('../models/Notification');
+      const customerName = modifiedBills[0]?.customerName || 'Customer';
+      await Notification.create({
+        user: req.user._id,
+        title: 'Bulk Payment Settlement',
+        message: `Settled payment of ₹${(originalPaymentAmount - paymentAmount).toFixed(2)} across ${modifiedBills.length} credit invoices for customer "${customerName}".`,
+        type: 'credit'
+      });
+    } catch (notifErr) {
+      console.error('Failed to create bulk payment notification:', notifErr);
     }
 
     res.json({
