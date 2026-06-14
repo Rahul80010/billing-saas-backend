@@ -128,7 +128,6 @@ const sendWhatsappBill = async (phone, customerName, total, pdfLink, businessNam
       type: 'document',
       document: {
         link: pdfLink,
-        caption: caption,
         filename: filename
       }
     };
