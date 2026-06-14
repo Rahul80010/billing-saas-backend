@@ -703,5 +703,177 @@ describe('Credit / Udhaar API', () => {
     p = await Product.findById(prodRes.body._id);
     expect(p.stock).toBe(10);
   });
+
+  it('should allow setting new reminder date on partial payments', async () => {
+    // 1. Create a credit bill
+    const billRes = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Reminder Tester',
+        customerPhone: '9876543210',
+        paymentType: 'Credit',
+        items: [{ productName: 'Credit Item', price: 200, quantity: 1, gst: 0 }]
+      });
+    expect(billRes.statusCode).toBe(201);
+    const billId = billRes.body._id;
+
+    // 2. Record a partial payment with a new reminder date
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const dateStr = nextWeek.toISOString().split('T')[0];
+
+    const payRes = await request(app)
+      .post(`/api/bills/${billId}/payments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        amount: 50,
+        note: 'Partial pay with date update',
+        dueDate: dateStr
+      });
+    expect(payRes.statusCode).toBe(200);
+
+    // 3. Verify the bill's dueDate has been updated
+    const updatedBill = await Bill.findById(billId);
+    expect(updatedBill.status).toBe('partial');
+    expect(updatedBill.remainingAmount).toBe(150);
+    expect(new Date(updatedBill.dueDate).toISOString().split('T')[0]).toBe(dateStr);
+  });
+
+  it('should allow setting new reminder date on customer bulk payments', async () => {
+    const phone = '9998887776';
+    // 1. Create a credit bill
+    const billRes = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Customer Bulk Reminder Tester',
+        customerPhone: phone,
+        paymentType: 'Credit',
+        items: [{ productName: 'Credit Item', price: 300, quantity: 1, gst: 0 }]
+      });
+    expect(billRes.statusCode).toBe(201);
+
+    // 2. Record bulk payment with a new reminder date
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const dateStr = nextWeek.toISOString().split('T')[0];
+
+    const bulkPayRes = await request(app)
+      .post(`/api/bills/customer/${phone}/payments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        amount: 100,
+        note: 'Bulk partial pay',
+        dueDate: dateStr
+      });
+    expect(bulkPayRes.statusCode).toBe(200);
+
+    // 3. Verify the bill has the new reminder date
+    const updatedBill = await Bill.findById(billRes.body._id);
+    expect(updatedBill.status).toBe('partial');
+    expect(updatedBill.remainingAmount).toBe(200);
+    expect(new Date(updatedBill.dueDate).toISOString().split('T')[0]).toBe(dateStr);
+  });
+
+  it('should return Click-to-Chat fallback WhatsApp URL if not connected', async () => {
+    // 1. Create a credit bill
+    const billRes = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'WhatsApp Tester',
+        customerPhone: '9876543210',
+        paymentType: 'Credit',
+        items: [{ productName: 'Credit Item', price: 100, quantity: 1, gst: 0 }]
+      });
+    expect(billRes.statusCode).toBe(201);
+    const billId = billRes.body._id;
+
+    // 2. Request WhatsApp reminder for single bill
+    const reminderRes = await request(app)
+      .post(`/api/bills/${billId}/whatsapp-reminder`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(reminderRes.statusCode).toBe(200);
+    expect(reminderRes.body.notConnected).toBe(true);
+    expect(reminderRes.body.whatsappUrl).toContain('https://api.whatsapp.com/send');
+    expect(reminderRes.body.whatsappUrl).toContain('9876543210');
+
+    // 3. Request WhatsApp reminder for customer level
+    const custReminderRes = await request(app)
+      .post(`/api/bills/customer/9876543210/whatsapp-reminder`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(custReminderRes.statusCode).toBe(200);
+    expect(custReminderRes.body.notConnected).toBe(true);
+    expect(custReminderRes.body.whatsappUrl).toContain('https://api.whatsapp.com/send');
+    expect(custReminderRes.body.whatsappUrl).toContain('9876543210');
+  });
+
+  it('should allow directly updating the reminder date of a specific bill', async () => {
+    // 1. Create a credit bill
+    const billRes = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Direct Edit Tester',
+        customerPhone: '9876543210',
+        paymentType: 'Credit',
+        items: [{ productName: 'Credit Item', price: 100, quantity: 1, gst: 0 }]
+      });
+    expect(billRes.statusCode).toBe(201);
+    const billId = billRes.body._id;
+
+    // 2. Update reminder date directly
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 15);
+    const dateStr = futureDate.toISOString().split('T')[0];
+
+    const putRes = await request(app)
+      .put(`/api/bills/${billId}/reminder-date`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dueDate: dateStr
+      });
+    expect(putRes.statusCode).toBe(200);
+
+    // 3. Verify it changed in database
+    const updatedBill = await Bill.findById(billId);
+    expect(new Date(updatedBill.dueDate).toISOString().split('T')[0]).toBe(dateStr);
+  });
+
+  it('should allow directly updating the reminder date for all customer pending bills', async () => {
+    const phone = '9991112223';
+    // 1. Create a credit bill
+    const billRes = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Customer Bulk Edit Tester',
+        customerPhone: phone,
+        paymentType: 'Credit',
+        items: [{ productName: 'Credit Item', price: 100, quantity: 1, gst: 0 }]
+      });
+    expect(billRes.statusCode).toBe(201);
+
+    // 2. Update customer bills reminder date
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 20);
+    const dateStr = futureDate.toISOString().split('T')[0];
+
+    const putRes = await request(app)
+      .put(`/api/bills/customer/${phone}/reminder-date`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        dueDate: dateStr
+      });
+    expect(putRes.statusCode).toBe(200);
+    expect(putRes.body.success).toBe(true);
+
+    // 3. Verify it changed in database
+    const updatedBill = await Bill.findById(billRes.body._id);
+    expect(new Date(updatedBill.dueDate).toISOString().split('T')[0]).toBe(dateStr);
+  });
 });
 

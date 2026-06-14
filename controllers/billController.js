@@ -1,7 +1,9 @@
 const Bill = require('../models/Bill');
 const Product = require('../models/Product');
-const { sendWhatsappBill } = require('../services/whatsappService');
+const { sendWhatsappBill, sendWhatsAppMessage, formatPhoneNumber } = require('../services/whatsappService');
 const { generateInvoicePdf } = require('../services/pdfService');
+const WhatsAppConnection = require('../models/WhatsAppConnection');
+const { decrypt } = require('../services/encryptionService');
 
 // @desc    Get all bills
 // @route   GET /api/bills
@@ -272,7 +274,7 @@ const getCreditStats = async (req, res) => {
 // @route   POST /api/bills/:id/payments
 // @access  Private
 const recordPayment = async (req, res) => {
-  const { amount, note } = req.body;
+  const { amount, note, dueDate } = req.body;
   const paymentAmount = Number(amount);
 
   if (isNaN(paymentAmount) || paymentAmount <= 0) {
@@ -300,6 +302,9 @@ const recordPayment = async (req, res) => {
       bill.remainingAmount = 0; // Guard against floating point underflow
     } else {
       bill.status = 'partial';
+      if (dueDate) {
+        bill.dueDate = new Date(dueDate);
+      }
     }
 
     // Add to payment history
@@ -334,7 +339,7 @@ const recordPayment = async (req, res) => {
 // @route   POST /api/bills/customer/:phone/payments
 // @access  Private
 const recordCustomerPayment = async (req, res) => {
-  const { amount, note } = req.body;
+  const { amount, note, dueDate } = req.body;
   let paymentAmount = Number(amount);
   const phone = req.params.phone;
 
@@ -386,6 +391,19 @@ const recordCustomerPayment = async (req, res) => {
     // Save all modified bills
     for (const bill of modifiedBills) {
       await bill.save();
+    }
+
+    // If a new reminder date is provided, update all remaining unpaid/partial bills for this customer
+    if (dueDate) {
+      await Bill.updateMany(
+        {
+          userId: req.user._id,
+          customerPhone: phone,
+          paymentType: 'Credit',
+          status: { $in: ['pending', 'partial'] }
+        },
+        { $set: { dueDate: new Date(dueDate) } }
+      );
     }
 
     // Create notification
@@ -442,6 +460,194 @@ const deleteBill = async (req, res) => {
   }
 };
 
+// @desc    Send WhatsApp reminder for a specific credit bill
+// @route   POST /api/bills/:id/whatsapp-reminder
+// @access  Private
+const sendBillWhatsAppReminder = async (req, res) => {
+  try {
+    const bill = await Bill.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!bill) {
+      return res.status(404).json({ message: 'Bill not found' });
+    }
+
+    if (bill.status === 'paid') {
+      return res.status(400).json({ message: 'This bill is already fully paid' });
+    }
+
+    const customerName = bill.customerName;
+    const phone = bill.customerPhone;
+    if (!phone) {
+      return res.status(400).json({ message: 'Customer phone number is missing' });
+    }
+
+    const remainingAmount = bill.remainingAmount.toFixed(2);
+    const businessName = req.user.businessName || req.user.name || 'MOHURI';
+    const invoiceNo = bill._id.toString().slice(-6).toUpperCase();
+    const reminderDateStr = bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('en-IN') : 'N/A';
+
+    // Construct reminder message in Hinglish
+    const message = `Hello ${customerName},\n\nThis is a friendly reminder from *${businessName}* that you have an outstanding balance of *₹${remainingAmount}* for Invoice #INV-${invoiceNo}.\n\n*Reminder Date:* ${reminderDateStr}\n\nPlease settle it soon. Thank you! 🙏`;
+
+    // Check if WhatsApp is connected
+    const connection = await WhatsAppConnection.findOne({ userId: req.user._id });
+    const isConnected = !!connection;
+
+    if (isConnected) {
+      const token = decrypt(connection.accessToken);
+      const wabaRes = await sendWhatsAppMessage({
+        phoneNumberId: connection.phoneNumberId,
+        accessToken: token,
+        to: phone,
+        message
+      });
+
+      if (wabaRes.success) {
+        return res.json({ success: true, method: 'api' });
+      } else {
+        console.warn('[WhatsApp Reminder] Meta API failed, falling back to Click-to-Chat:', wabaRes.error);
+      }
+    }
+
+    // Build Click-to-Chat fallback link
+    const cleanPhone = formatPhoneNumber(phone);
+    const waPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${waPhone}&text=${encodeURIComponent(message)}`;
+
+    res.json({
+      success: false,
+      notConnected: true,
+      whatsappUrl,
+      message: 'WhatsApp connection not configured. Opening WhatsApp Web link as fallback.'
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Send WhatsApp reminder for all outstanding credit bills of a customer
+// @route   POST /api/bills/customer/:phone/whatsapp-reminder
+// @access  Private
+const sendCustomerWhatsAppReminder = async (req, res) => {
+  const phone = req.params.phone;
+  try {
+    const bills = await Bill.find({
+      userId: req.user._id,
+      customerPhone: phone,
+      paymentType: 'Credit',
+      status: { $in: ['pending', 'partial'] }
+    }).sort({ dueDate: 1 });
+
+    if (bills.length === 0) {
+      return res.status(404).json({ message: 'No outstanding bills found for this customer' });
+    }
+
+    const customerName = bills[0].customerName;
+    let totalRemainingDue = 0;
+    let earliestDueDate = null;
+
+    bills.forEach(bill => {
+      totalRemainingDue += bill.remainingAmount;
+      if (bill.dueDate) {
+        if (!earliestDueDate || new Date(bill.dueDate) < new Date(earliestDueDate)) {
+          earliestDueDate = bill.dueDate;
+        }
+      }
+    });
+
+    const outstandingAmt = totalRemainingDue.toFixed(2);
+    const businessName = req.user.businessName || req.user.name || 'MOHURI';
+    const reminderDateStr = earliestDueDate ? new Date(earliestDueDate).toLocaleDateString('en-IN') : 'N/A';
+
+    // Construct reminder message
+    const message = `Hello ${customerName},\n\nThis is a friendly reminder from *${businessName}* that you have a total outstanding balance of *₹${outstandingAmt}* across pending invoices.\n\n*Reminder Date:* ${reminderDateStr}\n\nPlease settle it soon. Thank you! 🙏`;
+
+    // Check WhatsApp Connection
+    const connection = await WhatsAppConnection.findOne({ userId: req.user._id });
+    const isConnected = !!connection;
+
+    if (isConnected) {
+      const token = decrypt(connection.accessToken);
+      const wabaRes = await sendWhatsAppMessage({
+        phoneNumberId: connection.phoneNumberId,
+        accessToken: token,
+        to: phone,
+        message
+      });
+
+      if (wabaRes.success) {
+        return res.json({ success: true, method: 'api' });
+      } else {
+        console.warn('[WhatsApp Reminder] Meta API failed for customer level, falling back to Click-to-Chat:', wabaRes.error);
+      }
+    }
+
+    // Build Click-to-Chat fallback link
+    const cleanPhone = formatPhoneNumber(phone);
+    const waPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${waPhone}&text=${encodeURIComponent(message)}`;
+
+    res.json({
+      success: false,
+      notConnected: true,
+      whatsappUrl,
+      message: 'WhatsApp connection not configured. Opening WhatsApp Web link as fallback.'
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update reminder date for a bill directly
+// @route   PUT /api/bills/:id/reminder-date
+// @access  Private
+const updateBillReminderDate = async (req, res) => {
+  const { dueDate } = req.body;
+  if (!dueDate) {
+    return res.status(400).json({ message: 'Reminder Date is required' });
+  }
+
+  try {
+    const bill = await Bill.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!bill) {
+      return res.status(404).json({ message: 'Bill not found' });
+    }
+
+    bill.dueDate = new Date(dueDate);
+    const updatedBill = await bill.save();
+
+    res.json(updatedBill);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update reminder date for all outstanding bills of a customer
+// @route   PUT /api/bills/customer/:phone/reminder-date
+// @access  Private
+const updateCustomerReminderDate = async (req, res) => {
+  const { dueDate } = req.body;
+  const phone = req.params.phone;
+  if (!dueDate) {
+    return res.status(400).json({ message: 'Reminder Date is required' });
+  }
+
+  try {
+    const result = await Bill.updateMany(
+      {
+        userId: req.user._id,
+        customerPhone: phone,
+        paymentType: 'Credit',
+        status: { $in: ['pending', 'partial'] }
+      },
+      { $set: { dueDate: new Date(dueDate) } }
+    );
+
+    res.json({ success: true, message: `Updated reminder date for ${result.modifiedCount} bill(s).` });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getBills,
   createBill,
@@ -450,5 +656,9 @@ module.exports = {
   recordPayment,
   recordCustomerPayment,
   deleteBill,
+  sendBillWhatsAppReminder,
+  sendCustomerWhatsAppReminder,
+  updateBillReminderDate,
+  updateCustomerReminderDate,
 };
 

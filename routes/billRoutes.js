@@ -8,6 +8,10 @@ const {
   recordPayment,
   recordCustomerPayment,
   deleteBill,
+  sendBillWhatsAppReminder,
+  sendCustomerWhatsAppReminder,
+  updateBillReminderDate,
+  updateCustomerReminderDate,
 } = require('../controllers/billController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -19,7 +23,11 @@ router.use(protect);
 
 router.get('/credit/stats', getCreditStats);
 router.post('/customer/:phone/payments', recordCustomerPayment);
+router.post('/customer/:phone/whatsapp-reminder', sendCustomerWhatsAppReminder);
+router.put('/customer/:phone/reminder-date', updateCustomerReminderDate);
 router.post('/:id/payments', recordPayment);
+router.post('/:id/whatsapp-reminder', sendBillWhatsAppReminder);
+router.put('/:id/reminder-date', updateBillReminderDate);
 
 router.route('/').get(getBills).post(createBill);
 router.route('/:id').delete(deleteBill);
