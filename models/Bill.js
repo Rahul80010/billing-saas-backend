@@ -25,6 +25,11 @@ const itemSchema = new mongoose.Schema({
     enum: ['pcs', 'kg'],
     default: 'pcs',
   },
+  buyingCost: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
 });
 
 const billSchema = new mongoose.Schema({
