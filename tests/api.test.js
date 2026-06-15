@@ -204,6 +204,26 @@ describe('Products API', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.statusCode).toEqual(200);
   });
+
+  it('should create a new product with unit kg', async () => {
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Wheat Flour',
+        price: 40,
+        gst: 5,
+        stock: 100,
+        unit: 'kg'
+      });
+    expect(res.statusCode).toEqual(201);
+    expect(res.body.unit).toBe('kg');
+    
+    // Clean up
+    await request(app)
+      .delete(`/api/products/${res.body._id}`)
+      .set('Authorization', `Bearer ${token}`);
+  });
 });
 
 describe('Customers API', () => {
@@ -388,6 +408,52 @@ describe('Bills API', () => {
       });
     expect(custRes.statusCode).toBe(201);
     expect(custRes.body.address).toBe(address);
+  });
+
+  it('should create a bill with decimal quantities and units, and decrement product stock', async () => {
+    const Product = mongoose.model('Product');
+    
+    // 1. Create a product with unit kg and stock 10
+    const prodRes = await request(app)
+      .post('/api/products')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Basmati Rice',
+        price: 80,
+        gst: 5,
+        stock: 10,
+        unit: 'kg'
+      });
+    expect(prodRes.statusCode).toBe(201);
+    const prodId = prodRes.body._id;
+
+    // 2. Create a bill with quantity 1.5 kg
+    const billRes = await request(app)
+      .post('/api/bills')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customerName: 'Decimal Buyer',
+        customerPhone: '9998887771',
+        items: [
+          { productName: 'Basmati Rice', price: 80, quantity: 1.5, gst: 5, unit: 'kg' } // (80*1.5) + 5% = 120 + 6 = 126
+        ]
+      });
+    expect(billRes.statusCode).toBe(201);
+    expect(billRes.body.total).toBe(126);
+    expect(billRes.body.items[0].unit).toBe('kg');
+    expect(billRes.body.items[0].quantity).toBe(1.5);
+
+    // 3. Verify stock has decremented correctly (10 - 1.5 = 8.5)
+    const p = await Product.findById(prodId);
+    expect(p.stock).toBe(8.5);
+
+    // Clean up
+    await request(app)
+      .delete(`/api/bills/${billRes.body._id}`)
+      .set('Authorization', `Bearer ${token}`);
+    await request(app)
+      .delete(`/api/products/${prodId}`)
+      .set('Authorization', `Bearer ${token}`);
   });
 });
 

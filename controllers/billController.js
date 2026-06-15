@@ -80,6 +80,7 @@ const createBill = async (req, res) => {
         price,
         quantity,
         gst,
+        unit: item.unit || 'pcs',
       });
     }
 

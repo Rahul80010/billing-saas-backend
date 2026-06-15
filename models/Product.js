@@ -26,6 +26,11 @@ const productSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  unit: {
+    type: String,
+    enum: ['pcs', 'kg'],
+    default: 'pcs',
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', productSchema);

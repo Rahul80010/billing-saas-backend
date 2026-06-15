@@ -20,6 +20,11 @@ const itemSchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  unit: {
+    type: String,
+    enum: ['pcs', 'kg'],
+    default: 'pcs',
+  },
 });
 
 const billSchema = new mongoose.Schema({

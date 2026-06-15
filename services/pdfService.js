@@ -143,7 +143,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     .fontSize(9);
  
   doc.text('Item Description', 50, tableTop);
-  doc.text('Qty', 260, tableTop, { width: 40, align: 'right' });
+  doc.text('Qty', 240, tableTop, { width: 60, align: 'right' });
   doc.text('Unit Price', 310, tableTop, { width: 70, align: 'right' });
   doc.text('GST (%)', 390, tableTop, { width: 60, align: 'right' });
   doc.text('Amount (₹)', 460, tableTop, { width: 90, align: 'right' });
@@ -176,8 +176,11 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       
     doc.fillColor(textColor); // Restore color
 
-    doc.text(item.productName, 55, y, { width: 195, lineBreak: false });
-    doc.text(qty.toString(), 260, y, { width: 40, align: 'right' });
+    const unitSuffix = item.unit === 'kg' ? ' kg' : ' pcs';
+    const qtyText = `${qty}${unitSuffix}`;
+
+    doc.text(item.productName, 55, y, { width: 180, lineBreak: false });
+    doc.text(qtyText, 240, y, { width: 60, align: 'right' });
     doc.text(`₹${price.toFixed(2)}`, 310, y, { width: 70, align: 'right' });
     doc.text(`${gst}%`, 390, y, { width: 60, align: 'right' });
     doc.text(`₹${totalItem.toFixed(2)}`, 460, y, { width: 90, align: 'right' });
