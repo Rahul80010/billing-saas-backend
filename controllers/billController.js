@@ -185,8 +185,8 @@ const createBill = async (req, res) => {
     // Trigger WhatsApp bill in the background (non-blocking)
     if (customerPhone) {
       const businessName = req.user.businessName || req.user.name;
-      const backendBaseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
-      const pdfLink = `${backendBaseUrl}/api/bills/${createdBill._id}/pdf`;
+      const frontendUrl = process.env.FRONTEND_URL || 'https://mohuri.detalogy.com';
+      const pdfLink = `${frontendUrl}/api/invoice/pdf/${createdBill._id}`;
       const userConfig = {
         whatsappToken: req.user.whatsappToken,
         whatsappPhoneNumberId: req.user.whatsappPhoneNumberId,
