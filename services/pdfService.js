@@ -96,11 +96,11 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     .fillColor(textColor)
     .fontSize(9)
     .font('Roboto-Bold')
-    .text('INVOICE DETAIL', 400, 45, { align: 'right' })
+    .text('INVOICE DETAIL', 300, 45, { align: 'right', width: 250 })
     .font('Roboto')
     .fillColor(secondaryText)
-    .text(`Invoice ID: ${invoiceId}`, 400, 60, { align: 'right' })
-    .text(`Date: ${new Date(bill.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}`, 400, 72, { align: 'right' });
+    .text(`Invoice ID: ${invoiceId}`, 300, 58, { align: 'right', width: 250 })
+    .text(`Date: ${new Date(bill.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}`, 300, 70, { align: 'right', width: 250 });
 
   // Divider Line
   const dividerY = Math.max(105, currentY + 10);
