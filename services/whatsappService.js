@@ -20,7 +20,7 @@ const formatPhoneNumber = (phone) => {
  * @param {string} [params.message]
  * @param {object} [params.template]
  */
-const sendWhatsAppMessage = async ({ phoneNumberId, accessToken, to, message, template }) => {
+const sendWhatsAppMessage = async ({ phoneNumberId, accessToken, to, message, template, mediaId, mediaType = 'image' }) => {
   const cleanPhone = formatPhoneNumber(to);
   if (!cleanPhone) {
     return { success: false, error: 'Target phone number is empty or invalid.' };
@@ -30,7 +30,15 @@ const sendWhatsAppMessage = async ({ phoneNumberId, accessToken, to, message, te
   if (!accessToken || !phoneNumberId || accessToken === 'mock_token' || accessToken.includes('fake')) {
     console.log('\n==================================================');
     console.log(`[WHATSAPP SANDBOX MODE] Sending Message to: ${cleanPhone}`);
-    console.log(`Message Content: ${message || JSON.stringify(template)}`);
+    if (mediaId) {
+      console.log(`Media Type: ${mediaType}`);
+      console.log(`Media ID: ${mediaId}`);
+      if (message) {
+        console.log(`Caption: ${message}`);
+      }
+    } else {
+      console.log(`Message Content: ${message || JSON.stringify(template)}`);
+    }
     console.log('==================================================\n');
     return { success: true, sandbox: true, messageId: 'sandbox_msg_id' };
   }
@@ -47,11 +55,17 @@ const sendWhatsAppMessage = async ({ phoneNumberId, accessToken, to, message, te
     if (template) {
       payload.type = 'template';
       payload.template = template;
+    } else if (mediaId) {
+      payload.type = mediaType;
+      payload[mediaType] = {
+        id: mediaId,
+        ...(message ? { caption: message } : {})
+      };
     } else if (message) {
       payload.type = 'text';
       payload.text = { body: message };
     } else {
-      return { success: false, error: 'Either message or template parameters must be provided' };
+      return { success: false, error: 'Either message, template, or mediaId parameters must be provided' };
     }
 
     const response = await axios.post(url, payload, {
@@ -70,6 +84,46 @@ const sendWhatsAppMessage = async ({ phoneNumberId, accessToken, to, message, te
   } catch (error) {
     const errorDetails = error.response ? error.response.data : error.message;
     console.error(`[WhatsApp] API Dispatch failed for ${cleanPhone}:`, errorDetails);
+    return { success: false, error: typeof errorDetails === 'object' ? JSON.stringify(errorDetails) : errorDetails };
+  }
+};
+
+/**
+ * Uploads media (images) to Meta WhatsApp media API.
+ * @param {object} params
+ * @param {string} params.phoneNumberId
+ * @param {string} params.accessToken
+ * @param {Buffer} params.buffer
+ * @param {string} params.mimeType
+ */
+const uploadWhatsAppMedia = async ({ phoneNumberId, accessToken, buffer, mimeType }) => {
+  if (!accessToken || !phoneNumberId || accessToken === 'mock_token' || accessToken.includes('fake')) {
+    return { success: true, sandbox: true, mediaId: 'sandbox_media_id' };
+  }
+
+  try {
+    const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/media`;
+    const formData = new FormData();
+    const blob = new Blob([buffer], { type: mimeType });
+    const ext = mimeType.split('/')[1] || 'jpg';
+    formData.append('file', blob, `campaign_image.${ext}`);
+    formData.append('messaging_product', 'whatsapp');
+
+    const response = await axios.post(url, formData, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      timeout: 20000 // 20 seconds timeout for image uploads
+    });
+
+    if (response.status === 200 || response.status === 201) {
+      return { success: true, mediaId: response.data.id };
+    } else {
+      return { success: false, error: `Meta Media API returned ${response.status}: ${JSON.stringify(response.data)}` };
+    }
+  } catch (error) {
+    const errorDetails = error.response ? error.response.data : error.message;
+    console.error('[WhatsApp] Media upload failed:', errorDetails);
     return { success: false, error: typeof errorDetails === 'object' ? JSON.stringify(errorDetails) : errorDetails };
   }
 };
@@ -262,6 +316,7 @@ const sendOrderConfirmation = async (userId, { to, customerName, orderId, totalA
 module.exports = {
   formatPhoneNumber,
   sendWhatsAppMessage,
+  uploadWhatsAppMedia,
   sendWhatsappBill,
   sendInvoiceMessage,
   sendPaymentReminder,

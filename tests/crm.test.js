@@ -188,4 +188,21 @@ describe('WhatsApp CRM API', () => {
     expect(statsB.body.campaignsCount).toBe(0);
     expect(statsB.body.totalMessagesSent).toBe(0);
   });
+
+  it('should create a campaign successfully with an image attachment in Sandbox Mode', async () => {
+    const res = await request(app)
+      .post('/api/crm/campaigns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Promo with Image',
+        message: 'Get this awesome offer!',
+        recipients: [{ name: 'Customer A1', phone: '9990001111' }],
+        image: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA='
+      });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.name).toBe('Promo with Image');
+    expect(res.body.image).toContain('data:image/jpeg;base64');
+    expect(res.body.recipientsCount).toBe(1);
+  });
 });

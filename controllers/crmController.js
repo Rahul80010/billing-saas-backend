@@ -3,7 +3,7 @@ const Customer = require('../models/Customer');
 const Bill = require('../models/Bill');
 const WhatsAppConnection = require('../models/WhatsAppConnection');
 const { decrypt } = require('../services/encryptionService');
-const { sendWhatsAppMessage } = require('../services/whatsappService');
+const { sendWhatsAppMessage, uploadWhatsAppMedia } = require('../services/whatsappService');
 
 // @desc    Get CRM Statistics
 // @route   GET /api/crm/stats
@@ -102,7 +102,7 @@ const getSegmentCustomers = async (req, res) => {
 // @route   POST /api/crm/campaigns
 // @access  Private
 const createCampaign = async (req, res) => {
-  const { name, message, recipients } = req.body; // recipients: Array of { name, phone }
+  const { name, message, recipients, image } = req.body; // recipients: Array of { name, phone }, image: base64 string (optional)
 
   if (!name || !message || !Array.isArray(recipients) || recipients.length === 0) {
     return res.status(400).json({ message: 'Name, message, and a non-empty recipients list are required.' });
@@ -124,7 +124,34 @@ const createCampaign = async (req, res) => {
       return res.status(400).json({ message: 'No active WhatsApp connection found. Connect your WhatsApp account first.' });
     }
 
-    // 2. Loop and dispatch message to each recipient
+    // 2. Upload image to Meta if present
+    let mediaId = '';
+    if (image) {
+      const regex = /^data:(image\/\w+);base64,(.+)$/;
+      const matches = image.match(regex);
+      if (matches) {
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        const uploadResult = await uploadWhatsAppMedia({
+          phoneNumberId,
+          accessToken: token,
+          buffer,
+          mimeType
+        });
+        
+        if (uploadResult.success) {
+          mediaId = uploadResult.mediaId;
+        } else {
+          return res.status(400).json({ message: `Image upload to Meta failed: ${uploadResult.error}` });
+        }
+      } else {
+        return res.status(400).json({ message: 'Invalid image format. Must be a base64 data URI.' });
+      }
+    }
+
+    // 3. Loop and dispatch message to each recipient
     const recipientLogs = [];
     let successfulSends = 0;
 
@@ -145,6 +172,8 @@ const createCampaign = async (req, res) => {
         accessToken: token,
         to: recipient.phone,
         message: message,
+        mediaId: mediaId || undefined,
+        mediaType: 'image'
       });
 
       if (dispatchResult.success) {
@@ -164,11 +193,12 @@ const createCampaign = async (req, res) => {
       }
     }
 
-    // 3. Create Campaign entry in DB
+    // 4. Create Campaign entry in DB
     const campaign = new Campaign({
       userId: req.user._id,
       name,
       message,
+      image: image || '',
       recipientsCount: successfulSends,
       status: successfulSends === recipients.length ? 'completed' : (successfulSends > 0 ? 'processing' : 'failed'),
       recipients: recipientLogs,
