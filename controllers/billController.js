@@ -217,7 +217,9 @@ const getBillPdf = async (req, res) => {
       businessPhone: bill.userId?.businessPhone || '',
       gstin: bill.userId?.gstin || '',
       invoiceFooter: bill.userId?.invoiceFooter || '',
-      logo: bill.userId?.logo || ''
+      logo: bill.userId?.logo || '',
+      primaryColor: bill.userId?.primaryColor || '',
+      secondaryColor: bill.userId?.secondaryColor || ''
     };
 
     res.setHeader('Content-Type', 'application/pdf');

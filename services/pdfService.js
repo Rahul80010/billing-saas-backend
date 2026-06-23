@@ -35,8 +35,8 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   const bLogo = config.logo || '';
 
   // Styling palette
-  const primaryColor = '#093a84'; // Premium MOHURI navy blue
-  const secondaryColor = '#0066ff'; // Sky blue accent
+  const primaryColor = config.primaryColor || '#093a84'; // Premium MOHURI navy blue
+  const secondaryColor = config.secondaryColor || '#0066ff'; // Sky blue accent
   const textColor = '#1f2937'; // Slate dark gray
   const secondaryText = '#6b7280'; // Cool gray
   

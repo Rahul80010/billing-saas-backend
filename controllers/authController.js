@@ -285,7 +285,9 @@ const updateProfile = async (req, res) => {
     invoiceFooter,
     logo,
     whatsappBillTemplate,
-    whatsappReminderTemplate
+    whatsappReminderTemplate,
+    primaryColor,
+    secondaryColor
   } = req.body;
 
   try {
@@ -303,6 +305,8 @@ const updateProfile = async (req, res) => {
       user.logo = logo !== undefined ? logo : user.logo;
       user.whatsappBillTemplate = whatsappBillTemplate !== undefined ? whatsappBillTemplate : user.whatsappBillTemplate;
       user.whatsappReminderTemplate = whatsappReminderTemplate !== undefined ? whatsappReminderTemplate : user.whatsappReminderTemplate;
+      user.primaryColor = primaryColor !== undefined ? primaryColor : user.primaryColor;
+      user.secondaryColor = secondaryColor !== undefined ? secondaryColor : user.secondaryColor;
 
       const updatedUser = await user.save();
       res.json({
@@ -319,6 +323,8 @@ const updateProfile = async (req, res) => {
         logo: updatedUser.logo,
         whatsappBillTemplate: updatedUser.whatsappBillTemplate,
         whatsappReminderTemplate: updatedUser.whatsappReminderTemplate,
+        primaryColor: updatedUser.primaryColor,
+        secondaryColor: updatedUser.secondaryColor,
       });
     } else {
       res.status(404).json({ message: 'User not found' });

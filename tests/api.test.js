@@ -507,7 +507,9 @@ describe('User Profile API', () => {
         gstin: '22GSTIN1234A1Z0',
         invoiceFooter: 'Mock Footer Note',
         whatsappBillTemplate: 'Custom bill template for {customerName} total: {total}',
-        whatsappReminderTemplate: 'Custom reminder for {customerName} outstanding: {remainingAmount} invoice: {invoiceNo}'
+        whatsappReminderTemplate: 'Custom reminder for {customerName} outstanding: {remainingAmount} invoice: {invoiceNo}',
+        primaryColor: '#aabbcc',
+        secondaryColor: '#ddeeff'
       });
     expect(res.statusCode).toBe(200);
     expect(res.body.businessName).toBe('My Awesome Retail Store');
@@ -519,7 +521,9 @@ describe('User Profile API', () => {
     expect(res.body.invoiceFooter).toBe('Mock Footer Note');
     expect(res.body.whatsappBillTemplate).toBe('Custom bill template for {customerName} total: {total}');
     expect(res.body.whatsappReminderTemplate).toBe('Custom reminder for {customerName} outstanding: {remainingAmount} invoice: {invoiceNo}');
-
+    expect(res.body.primaryColor).toBe('#aabbcc');
+    expect(res.body.secondaryColor).toBe('#ddeeff');
+ 
     // Verify 'me' endpoint returns these updated credentials
     const meRes = await request(app)
       .get('/api/auth/me')
@@ -534,6 +538,8 @@ describe('User Profile API', () => {
     expect(meRes.body.invoiceFooter).toBe('Mock Footer Note');
     expect(meRes.body.whatsappBillTemplate).toBe('Custom bill template for {customerName} total: {total}');
     expect(meRes.body.whatsappReminderTemplate).toBe('Custom reminder for {customerName} outstanding: {remainingAmount} invoice: {invoiceNo}');
+    expect(meRes.body.primaryColor).toBe('#aabbcc');
+    expect(meRes.body.secondaryColor).toBe('#ddeeff');
   });
 });
 

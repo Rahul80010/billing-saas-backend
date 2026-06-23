@@ -82,6 +82,14 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: 'Hello {customerName},\n\nThis is a friendly reminder from *{businessName}* that you have an outstanding balance of *₹{remainingAmount}* for Invoice #INV-{invoiceNo}.\n\n*Reminder Date:* {reminderDate}\n\nPlease settle it soon. Thank you! 🙏',
   },
+  primaryColor: {
+    type: String,
+    default: '#093a84',
+  },
+  secondaryColor: {
+    type: String,
+    default: '#0066ff',
+  },
 }, { timestamps: true });
 
 // Pre-save hook to hash password
