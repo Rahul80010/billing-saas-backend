@@ -504,7 +504,12 @@ const sendBillWhatsAppReminder = async (req, res) => {
       return res.status(400).json({ message: 'Customer phone number is missing' });
     }
 
-    const remainingAmount = bill.remainingAmount.toFixed(2);
+    const customAmountVal = req.body.customAmount !== undefined ? Number(req.body.customAmount) : bill.remainingAmount;
+    if (isNaN(customAmountVal) || customAmountVal <= 0) {
+      return res.status(400).json({ message: 'Invalid custom reminder amount' });
+    }
+
+    const remainingAmount = customAmountVal.toFixed(2);
     const businessName = req.user.businessName || req.user.name || 'MOHURI';
     const invoiceNo = bill._id.toString().slice(-6).toUpperCase();
     const reminderDateStr = bill.dueDate ? new Date(bill.dueDate).toLocaleDateString('en-IN') : 'N/A';
@@ -531,7 +536,7 @@ const sendBillWhatsAppReminder = async (req, res) => {
           const upiUri = generateUpiUri(
             req.user.upiId,
             req.user.upiName || businessName,
-            bill.remainingAmount,
+            customAmountVal,
             `Reminder-${invoiceNo}`
           );
           const qrBuffer = await generateQrBuffer(upiUri);
@@ -582,7 +587,7 @@ const sendBillWhatsAppReminder = async (req, res) => {
       const upiUri = generateUpiUri(
         req.user.upiId,
         req.user.upiName || businessName,
-        bill.remainingAmount,
+        customAmountVal,
         `Reminder-${invoiceNo}`
       );
       clickToChatMessage += `\n\nPay Instantly via UPI: ${upiUri}`;
@@ -633,7 +638,12 @@ const sendCustomerWhatsAppReminder = async (req, res) => {
       }
     });
 
-    const outstandingAmt = totalRemainingDue.toFixed(2);
+    const customAmountVal = req.body.customAmount !== undefined ? Number(req.body.customAmount) : totalRemainingDue;
+    if (isNaN(customAmountVal) || customAmountVal <= 0) {
+      return res.status(400).json({ message: 'Invalid custom reminder amount' });
+    }
+
+    const outstandingAmt = customAmountVal.toFixed(2);
     const businessName = req.user.businessName || req.user.name || 'MOHURI';
     const reminderDateStr = earliestDueDate ? new Date(earliestDueDate).toLocaleDateString('en-IN') : 'N/A';
 
@@ -659,7 +669,7 @@ const sendCustomerWhatsAppReminder = async (req, res) => {
           const upiUri = generateUpiUri(
             req.user.upiId,
             req.user.upiName || businessName,
-            totalRemainingDue,
+            customAmountVal,
             `Reminder-Multiple`
           );
           const qrBuffer = await generateQrBuffer(upiUri);
@@ -710,7 +720,7 @@ const sendCustomerWhatsAppReminder = async (req, res) => {
       const upiUri = generateUpiUri(
         req.user.upiId,
         req.user.upiName || businessName,
-        totalRemainingDue,
+        customAmountVal,
         `Reminder-Multiple`
       );
       clickToChatMessage += `\n\nPay Instantly via UPI: ${upiUri}`;
