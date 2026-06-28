@@ -1,6 +1,7 @@
 const axios = require('axios');
 const WhatsAppConnection = require('../models/WhatsAppConnection');
 const { decrypt } = require('./encryptionService');
+const { generateUpiUri, generateQrBuffer } = require('./qrService');
 
 /**
  * Clean phone number to conform with Meta API specs (digits only)
@@ -169,6 +170,15 @@ const sendWhatsappBill = async (phone, customerName, total, pdfLink, businessNam
     console.log(`Merchant Business Name: ${businessName || 'MOHURI'}`);
     console.log(`PDF Document Link: ${pdfLink || 'N/A'}`);
     console.log(`Caption: ${caption}`);
+    
+    if (userConfig.enableWhatsappQr && userConfig.upiId) {
+      console.log('--------------------------------------------------');
+      console.log(`[WHATSAPP SANDBOX MODE] Sending UPI QR Code Image to: ${cleanPhone}`);
+      const qrCaption = `Scan this QR Code to settle the bill of ₹${Number(total).toFixed(2)} via UPI.`;
+      console.log(`Caption: ${qrCaption}`);
+      console.log(`UPI ID: ${userConfig.upiId}`);
+      console.log(`Payee Name: ${userConfig.upiName || businessName || 'MOHURI'}`);
+    }
     console.log('==================================================\n');
     return { success: true, sandbox: true, caption };
   }
@@ -201,6 +211,42 @@ const sendWhatsappBill = async (phone, customerName, total, pdfLink, businessNam
     });
 
     if (response.status === 200 || response.status === 201) {
+      // Send QR Code if enabled
+      if (userConfig.enableWhatsappQr && userConfig.upiId) {
+        try {
+          const upiUri = generateUpiUri(
+            userConfig.upiId,
+            userConfig.upiName || businessName || 'MOHURI',
+            total,
+            `Invoice-${shortBillId}`
+          );
+          const qrBuffer = await generateQrBuffer(upiUri);
+          
+          const uploadRes = await uploadWhatsAppMedia({
+            phoneNumberId,
+            accessToken: token,
+            buffer: qrBuffer,
+            mimeType: 'image/png'
+          });
+          
+          if (uploadRes.success) {
+            const qrCaption = `Scan this QR Code to settle the bill of ₹${Number(total).toFixed(2)} via UPI.`;
+            await sendWhatsAppMessage({
+              phoneNumberId,
+              accessToken: token,
+              to: phone,
+              mediaId: uploadRes.mediaId,
+              mediaType: 'image',
+              message: qrCaption
+            });
+          } else {
+            console.error('[WhatsApp Bill QR] Media upload failed:', uploadRes.error);
+          }
+        } catch (qrErr) {
+          console.error('[WhatsApp Bill QR] Error generating or sending QR:', qrErr.message);
+        }
+      }
+
       return { success: true, messageId: response.data.messages?.[0]?.id || 'N/A' };
     } else {
       return { success: false, error: `Meta API returned ${response.status}: ${JSON.stringify(response.data)}` };

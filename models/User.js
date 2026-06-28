@@ -90,6 +90,24 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: '#0066ff',
   },
+  upiId: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  upiName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  enableInvoiceQr: {
+    type: Boolean,
+    default: false,
+  },
+  enableWhatsappQr: {
+    type: Boolean,
+    default: false,
+  },
 }, { timestamps: true });
 
 // Pre-save hook to hash password

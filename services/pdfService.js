@@ -199,6 +199,27 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   // 4. Totals Block
   let totalsTop = y + 15;
   
+  // Draw QR Code on the left if present in config
+  if (config.qrCodeBuffer) {
+    try {
+      doc.image(config.qrCodeBuffer, 50, totalsTop, { fit: [80, 80] });
+      doc
+        .fillColor(textColor)
+        .font('Roboto-Bold')
+        .fontSize(8)
+        .text('Scan to Pay via UPI', 50, totalsTop + 85);
+      if (config.upiId) {
+        doc
+          .fillColor(secondaryText)
+          .font('Roboto')
+          .fontSize(7)
+          .text(config.upiId, 50, totalsTop + 95, { width: 150 });
+      }
+    } catch (qrDrawError) {
+      console.error('Error drawing QR Code on PDF:', qrDrawError);
+    }
+  }
+  
   if (bill.paymentType === 'Credit') {
     doc
       .fillColor(textColor)
@@ -239,12 +260,21 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       .text(`Grand Total (Paid): ₹${Number(bill.total).toFixed(2)}`, 50, totalsTop, { align: 'right', width: 500 });
   }
 
+  // Compute footer position dynamically to avoid overlap
+  let footerY = totalsTop + 60;
+  if (bill.paymentType === 'Credit') {
+    footerY = totalsTop + (bill.dueDate ? 80 : 65);
+  }
+  if (config.qrCodeBuffer) {
+    footerY = Math.max(footerY, totalsTop + 115);
+  }
+
   // 5. Invoice Footer
   doc
     .fillColor(secondaryText)
     .font('Roboto-Italic')
     .fontSize(9)
-    .text(bFooter, 50, totalsTop + 50, { align: 'center', width: 500 });
+    .text(bFooter, 50, footerY, { align: 'center', width: 500 });
 
   // Finalize the PDF file
   doc.end();

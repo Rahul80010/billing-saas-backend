@@ -1,9 +1,10 @@
 const Bill = require('../models/Bill');
 const Product = require('../models/Product');
-const { sendWhatsappBill, sendWhatsAppMessage, formatPhoneNumber } = require('../services/whatsappService');
+const { sendWhatsappBill, sendWhatsAppMessage, formatPhoneNumber, uploadWhatsAppMedia } = require('../services/whatsappService');
 const { generateInvoicePdf } = require('../services/pdfService');
 const WhatsAppConnection = require('../models/WhatsAppConnection');
 const { decrypt } = require('../services/encryptionService');
+const { generateUpiUri, generateQrBuffer } = require('../services/qrService');
 
 // @desc    Get all bills
 // @route   GET /api/bills
@@ -190,7 +191,11 @@ const createBill = async (req, res) => {
       const userConfig = {
         whatsappToken: req.user.whatsappToken,
         whatsappPhoneNumberId: req.user.whatsappPhoneNumberId,
-        whatsappBillTemplate: req.user.whatsappBillTemplate
+        whatsappBillTemplate: req.user.whatsappBillTemplate,
+        enableWhatsappQr: req.user.enableWhatsappQr,
+        upiId: req.user.upiId,
+        upiName: req.user.upiName,
+        billId: createdBill._id
       };
       sendWhatsappBill(customerPhone, customerName, createdBill.total, pdfLink, businessName, userConfig);
     }
@@ -219,8 +224,22 @@ const getBillPdf = async (req, res) => {
       invoiceFooter: bill.userId?.invoiceFooter || '',
       logo: bill.userId?.logo || '',
       primaryColor: bill.userId?.primaryColor || '',
-      secondaryColor: bill.userId?.secondaryColor || ''
+      secondaryColor: bill.userId?.secondaryColor || '',
+      upiId: bill.userId?.upiId || '',
+      upiName: bill.userId?.upiName || ''
     };
+
+    if (bill.userId?.enableInvoiceQr && bill.userId?.upiId) {
+      try {
+        const upiAmount = bill.paymentType === 'Credit' ? bill.remainingAmount : bill.total;
+        const upiNote = `Invoice-${bill._id.toString().slice(-6).toUpperCase()}`;
+        const upiUri = generateUpiUri(bill.userId.upiId, bill.userId.upiName || businessConfig.businessName, upiAmount, upiNote);
+        const qrBuffer = await generateQrBuffer(upiUri);
+        businessConfig.qrCodeBuffer = qrBuffer;
+      } catch (qrErr) {
+        console.error('Error generating UPI QR in getBillPdf:', qrErr);
+      }
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename=invoice_${bill._id.toString().slice(-6).toUpperCase()}.pdf`);
@@ -505,12 +524,50 @@ const sendBillWhatsAppReminder = async (req, res) => {
 
     if (isConnected) {
       const token = decrypt(connection.accessToken);
-      const wabaRes = await sendWhatsAppMessage({
-        phoneNumberId: connection.phoneNumberId,
-        accessToken: token,
-        to: phone,
-        message
-      });
+      let wabaRes;
+
+      if (req.user.enableWhatsappQr && req.user.upiId) {
+        try {
+          const upiUri = generateUpiUri(
+            req.user.upiId,
+            req.user.upiName || businessName,
+            bill.remainingAmount,
+            `Reminder-${invoiceNo}`
+          );
+          const qrBuffer = await generateQrBuffer(upiUri);
+          const uploadRes = await uploadWhatsAppMedia({
+            phoneNumberId: connection.phoneNumberId,
+            accessToken: token,
+            buffer: qrBuffer,
+            mimeType: 'image/png'
+          });
+
+          if (uploadRes.success) {
+            wabaRes = await sendWhatsAppMessage({
+              phoneNumberId: connection.phoneNumberId,
+              accessToken: token,
+              to: phone,
+              mediaId: uploadRes.mediaId,
+              mediaType: 'image',
+              message: message
+            });
+          } else {
+            console.error('[WhatsApp Reminder QR] Media upload failed:', uploadRes.error);
+          }
+        } catch (qrErr) {
+          console.error('[WhatsApp Reminder QR] Error sending QR:', qrErr.message);
+        }
+      }
+
+      // Fallback to text message if QR code send failed or wasn't configured
+      if (!wabaRes || !wabaRes.success) {
+        wabaRes = await sendWhatsAppMessage({
+          phoneNumberId: connection.phoneNumberId,
+          accessToken: token,
+          to: phone,
+          message
+        });
+      }
 
       if (wabaRes.success) {
         return res.json({ success: true, method: 'api' });
@@ -519,10 +576,21 @@ const sendBillWhatsAppReminder = async (req, res) => {
       }
     }
 
-    // Build Click-to-Chat fallback link
+    // Build Click-to-Chat fallback link (append UPI link if configured)
+    let clickToChatMessage = message;
+    if (req.user.enableWhatsappQr && req.user.upiId) {
+      const upiUri = generateUpiUri(
+        req.user.upiId,
+        req.user.upiName || businessName,
+        bill.remainingAmount,
+        `Reminder-${invoiceNo}`
+      );
+      clickToChatMessage += `\n\nPay Instantly via UPI: ${upiUri}`;
+    }
+
     const cleanPhone = formatPhoneNumber(phone);
     const waPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${waPhone}&text=${encodeURIComponent(message)}`;
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${waPhone}&text=${encodeURIComponent(clickToChatMessage)}`;
 
     res.json({
       success: false,
@@ -584,12 +652,50 @@ const sendCustomerWhatsAppReminder = async (req, res) => {
 
     if (isConnected) {
       const token = decrypt(connection.accessToken);
-      const wabaRes = await sendWhatsAppMessage({
-        phoneNumberId: connection.phoneNumberId,
-        accessToken: token,
-        to: phone,
-        message
-      });
+      let wabaRes;
+
+      if (req.user.enableWhatsappQr && req.user.upiId) {
+        try {
+          const upiUri = generateUpiUri(
+            req.user.upiId,
+            req.user.upiName || businessName,
+            totalRemainingDue,
+            `Reminder-Multiple`
+          );
+          const qrBuffer = await generateQrBuffer(upiUri);
+          const uploadRes = await uploadWhatsAppMedia({
+            phoneNumberId: connection.phoneNumberId,
+            accessToken: token,
+            buffer: qrBuffer,
+            mimeType: 'image/png'
+          });
+
+          if (uploadRes.success) {
+            wabaRes = await sendWhatsAppMessage({
+              phoneNumberId: connection.phoneNumberId,
+              accessToken: token,
+              to: phone,
+              mediaId: uploadRes.mediaId,
+              mediaType: 'image',
+              message: message
+            });
+          } else {
+            console.error('[WhatsApp Customer Reminder QR] Media upload failed:', uploadRes.error);
+          }
+        } catch (qrErr) {
+          console.error('[WhatsApp Customer Reminder QR] Error sending QR:', qrErr.message);
+        }
+      }
+
+      // Fallback
+      if (!wabaRes || !wabaRes.success) {
+        wabaRes = await sendWhatsAppMessage({
+          phoneNumberId: connection.phoneNumberId,
+          accessToken: token,
+          to: phone,
+          message
+        });
+      }
 
       if (wabaRes.success) {
         return res.json({ success: true, method: 'api' });
@@ -598,10 +704,21 @@ const sendCustomerWhatsAppReminder = async (req, res) => {
       }
     }
 
-    // Build Click-to-Chat fallback link
+    // Build Click-to-Chat fallback link (append UPI link if configured)
+    let clickToChatMessage = message;
+    if (req.user.enableWhatsappQr && req.user.upiId) {
+      const upiUri = generateUpiUri(
+        req.user.upiId,
+        req.user.upiName || businessName,
+        totalRemainingDue,
+        `Reminder-Multiple`
+      );
+      clickToChatMessage += `\n\nPay Instantly via UPI: ${upiUri}`;
+    }
+
     const cleanPhone = formatPhoneNumber(phone);
     const waPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${waPhone}&text=${encodeURIComponent(message)}`;
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${waPhone}&text=${encodeURIComponent(clickToChatMessage)}`;
 
     res.json({
       success: false,

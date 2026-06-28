@@ -287,7 +287,11 @@ const updateProfile = async (req, res) => {
     whatsappBillTemplate,
     whatsappReminderTemplate,
     primaryColor,
-    secondaryColor
+    secondaryColor,
+    upiId,
+    upiName,
+    enableInvoiceQr,
+    enableWhatsappQr
   } = req.body;
 
   try {
@@ -307,6 +311,10 @@ const updateProfile = async (req, res) => {
       user.whatsappReminderTemplate = whatsappReminderTemplate !== undefined ? whatsappReminderTemplate : user.whatsappReminderTemplate;
       user.primaryColor = primaryColor !== undefined ? primaryColor : user.primaryColor;
       user.secondaryColor = secondaryColor !== undefined ? secondaryColor : user.secondaryColor;
+      user.upiId = upiId !== undefined ? upiId : user.upiId;
+      user.upiName = upiName !== undefined ? upiName : user.upiName;
+      user.enableInvoiceQr = enableInvoiceQr !== undefined ? enableInvoiceQr : user.enableInvoiceQr;
+      user.enableWhatsappQr = enableWhatsappQr !== undefined ? enableWhatsappQr : user.enableWhatsappQr;
 
       const updatedUser = await user.save();
       res.json({
@@ -325,6 +333,10 @@ const updateProfile = async (req, res) => {
         whatsappReminderTemplate: updatedUser.whatsappReminderTemplate,
         primaryColor: updatedUser.primaryColor,
         secondaryColor: updatedUser.secondaryColor,
+        upiId: updatedUser.upiId,
+        upiName: updatedUser.upiName,
+        enableInvoiceQr: updatedUser.enableInvoiceQr,
+        enableWhatsappQr: updatedUser.enableWhatsappQr,
       });
     } else {
       res.status(404).json({ message: 'User not found' });
