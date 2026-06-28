@@ -17,7 +17,9 @@ const generateUpiUri = (upiId, payeeName, amount, note = '') => {
   
   const formattedAmount = Number(amount).toFixed(2);
   
-  let uri = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(cleanName)}&am=${formattedAmount}&cu=INR`;
+  // am specifies the prefilled total amount. 
+  // mam (minimum amount) = 0.01 tells the UPI app to unlock the amount field, allowing the customer to edit it.
+  let uri = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(cleanName)}&am=${formattedAmount}&mam=0.01&cu=INR`;
   if (cleanNote) {
     uri += `&tn=${encodeURIComponent(cleanNote)}`;
   }

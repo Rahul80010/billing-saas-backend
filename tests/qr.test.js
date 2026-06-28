@@ -50,6 +50,7 @@ describe('UPI QR Code Service', () => {
     expect(uri).toContain('pa=merchant@upi');
     expect(uri).toContain('pn=My%20Business%20Name');
     expect(uri).toContain('am=2500.50');
+    expect(uri).toContain('mam=0.01');
     expect(uri).toContain('tn=Invoice-1234');
   });
 
