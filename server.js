@@ -7,6 +7,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
+const path = require('path');
 
 // Load env vars
 dotenv.config();
@@ -27,6 +28,9 @@ app.use(express.json({
   }
 }));
 
+// Static uploads serving
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
@@ -36,6 +40,7 @@ app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
 app.use('/api/webhooks', require('./routes/webhookRoutes'));
 app.use('/api/crm', require('./routes/crmRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/image-generations', require('./routes/imageGenerationRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {
