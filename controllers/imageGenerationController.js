@@ -23,23 +23,23 @@ const getDimensions = (aspectRatio, isUpscaled = false) => {
 const getStylePrompt = (style) => {
   switch (style) {
     case 'Realistic':
-      return ', photorealistic, 8k resolution, highly detailed, sharp focus, lifelike textures, professional color grading';
+      return ', ultra-realistic photorealistic, 8k resolution, highly detailed textures, sharp focus, real life camera shot, professional studio color grading, dynamic lighting, award-winning photography';
     case 'Cinematic':
-      return ', cinematic lighting, dramatic depth of field, blockbuster movie scene mood, highly detailed, 35mm film style';
+      return ', cinematic composition, beautiful dramatic lighting, intense depth of field, blockbuster movie screenshot, shot on anamorphic lens, highly detailed, atmospheric smoke and neon glare';
     case 'Product Photography':
-      return ', professional studio product photography, clean monochrome background, soft commercial lighting, crisp details, hyper-realistic';
+      return ', professional commercial studio product photography, clean minimalist studio background, soft key lighting, commercial backlight, crisp reflection, sharp details, high contrast, perfect commercial poster composition';
     case 'Anime':
-      return ', hand-drawn anime key art style, vibrant aesthetic colors, detailed background, cell shaded animation';
+      return ', beautiful modern anime key art style, vibrant aesthetic neon colors, detailed custom backdrop scenery, highly polished illustration, desktop wallpaper design';
     case 'Illustration':
-      return ', beautiful vector graphic illustration style, flat modern design, clean minimal vector strokes';
+      return ', clean modern vector graphics illustration, minimalist style flat art, high contrast layout, aesthetic graphic design';
     case '3D Render':
-      return ', digital 3D octane render, glossy clay texture, cute blender style model, highly detailed';
+      return ', digital 3D octane render, cute glossy blender style clay modeling, vivid pastel color scheme, highly detailed 3D model, isometric view';
     case 'Minimal':
-      return ', minimal art style, high contrast, clean shapes, simplistic composition, elegant';
+      return ', elegant minimalist style art, high contrast shadows, clean geometry shape, simplistic composition, premium brand aesthetic';
     case 'Poster Design':
-      return ', graphic poster style, bold vintage colors, aesthetic layout composition, screen printed style';
+      return ', professional modern advertisement poster design, elegant typography layout, high contrast bold color palette, vector composition graphic, clean graphic design layout';
     case 'Social Media Creative':
-      return ', eye-catching social media marketing creative design, high contrast graphic, trendy promotional display';
+      return ', eye-catching social media creative, high-converting banner advertisement graphic, professional brand marketing display layout, high contrast modern creative design';
     default:
       return '';
   }
@@ -50,14 +50,18 @@ const getStylePrompt = (style) => {
 // @access  Private
 const generateImage = async (req, res) => {
   try {
-    const { prompt, negativePrompt, style, aspectRatio } = req.body;
+    const { prompt, negativePrompt, style, aspectRatio, magicEnhance } = req.body;
 
     if (!prompt) {
       return res.status(400).json({ message: 'Prompt is required' });
     }
 
     // Enhance prompt with style modifiers
-    const enhancedPrompt = prompt.trim() + getStylePrompt(style);
+    let enhancedPrompt = prompt.trim() + getStylePrompt(style);
+
+    if (magicEnhance) {
+      enhancedPrompt += ', professional marketing poster design composition, optimal layout for text placement, clean copy space, high-end branding visual, luxury advertising setup, crisp graphic design elements, sharp detailed textures';
+    }
 
     // Calculate dimensions
     const { width, height } = getDimensions(aspectRatio);
@@ -66,7 +70,7 @@ const generateImage = async (req, res) => {
     const encodedPrompt = encodeURIComponent(enhancedPrompt);
     
     // Pollinations AI endpoint (Flux model)
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux-realism&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
 
     // Download image from Pollinations
     const response = await axios.get(pollinationsUrl, { responseType: 'arraybuffer' });
@@ -162,7 +166,7 @@ const upscaleImage = async (req, res) => {
     // Calculate dimensions at 1.5x scale
     const { width, height } = getDimensions(generation.aspectRatio, true);
     const encodedPrompt = encodeURIComponent(enhancedPrompt);
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux-realism&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
 
     const response = await axios.get(pollinationsUrl, { responseType: 'arraybuffer' });
     const buffer = Buffer.from(response.data, 'binary');
