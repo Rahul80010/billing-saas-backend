@@ -147,7 +147,7 @@ const generateImageBuffer = async (enhancedPrompt, aspectRatio) => {
   console.log('Generating image using Pollinations Flux...');
   const { width, height } = getDimensions(aspectRatio);
   const encodedPrompt = encodeURIComponent(enhancedPrompt);
-  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux-realism&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
 
   const response = await axios.get(pollinationsUrl, { responseType: 'arraybuffer', timeout: 30000 });
   return Buffer.from(response.data, 'binary');
