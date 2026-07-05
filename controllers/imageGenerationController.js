@@ -45,6 +45,56 @@ const getStylePrompt = (style) => {
   }
 };
 
+// Helper to optimize prompt using Gemini 2.5 Flash
+const getOptimizedPromptFromGemini = async (rawPrompt, style) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return rawPrompt;
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const systemInstruction = `You are an expert AI prompt engineer for image generators (like Flux/Stable Diffusion).
+Your task is to take a raw, unstructured user prompt (which may contain lists, bullet points, text requirements like "Shop Name: X", "Text: Y") and convert it into a SINGLE, cohesive, highly descriptive paragraph prompt.
+
+Follow these rules:
+1. Do NOT use bullet points, keys (like "Shop Name:"), or lists. Explain the entire visual scene in a continuous paragraph.
+2. If there are text requirements (like shop names, slogans, labels), place them in double quotes and specify where they should be rendered (e.g. "a glowing neon sign on the wall reads 'Xiao Tech'", "the text 'Best Prices' is written in elegant white typography at the bottom of the poster").
+3. Describe professional studio lighting (volumetric lighting, soft shadows), high-fidelity textures, professional color grading, and clean background space for overlays.
+4. Keep the output focused purely on the final descriptive prompt paragraph. Do NOT add greetings, intro, or explanations. Only return the final prompt text.`;
+
+    const response = await axios.post(
+      url,
+      {
+        contents: [
+          {
+            parts: [
+              {
+                text: `${systemInstruction}\n\nUser Request: ${rawPrompt}\nArtistic Style: ${style}`
+              }
+            ]
+          }
+        ]
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      }
+    );
+
+    if (response.data && response.data.candidates && response.data.candidates[0]) {
+      const optimizedText = response.data.candidates[0].content.parts[0].text;
+      if (optimizedText) {
+        console.log('Optimized Prompt by Gemini:', optimizedText.trim());
+        return optimizedText.trim();
+      }
+    }
+  } catch (error) {
+    console.error('Failed to optimize prompt via Gemini Flash:', error.message);
+  }
+  return rawPrompt;
+};
+
 // Helper to generate image buffer (Google Imagen 3 API with Pollinations Flux fallback)
 const generateImageBuffer = async (enhancedPrompt, aspectRatio) => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -114,8 +164,11 @@ const generateImage = async (req, res) => {
       return res.status(400).json({ message: 'Prompt is required' });
     }
 
+    // First optimize prompt using Gemini 2.5 Flash if possible
+    const optimizedPrompt = await getOptimizedPromptFromGemini(prompt, style);
+
     // Enhance prompt with style modifiers
-    let enhancedPrompt = prompt.trim() + getStylePrompt(style);
+    let enhancedPrompt = optimizedPrompt.trim() + getStylePrompt(style);
 
     if (magicEnhance) {
       enhancedPrompt += ', professional marketing poster design composition, optimal layout for text placement, clean copy space, high-end branding visual, luxury advertising setup, crisp graphic design elements, sharp detailed textures';
@@ -208,8 +261,11 @@ const upscaleImage = async (req, res) => {
       return res.json(generation); // Already upscaled
     }
 
+    // First optimize prompt using Gemini 2.5 Flash if possible
+    const optimizedPrompt = await getOptimizedPromptFromGemini(generation.prompt, generation.style);
+
     // Enhance prompt with style modifiers
-    const enhancedPrompt = generation.prompt.trim() + getStylePrompt(generation.style) + ', highly detailed textures, masterfully rendered';
+    const enhancedPrompt = optimizedPrompt.trim() + getStylePrompt(generation.style) + ', highly detailed textures, masterfully rendered';
 
     // Generate image buffer (using Gemini Imagen 3 with Pollinations fallback)
     const buffer = await generateImageBuffer(enhancedPrompt, generation.aspectRatio);
