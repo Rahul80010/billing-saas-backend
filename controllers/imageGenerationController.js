@@ -45,6 +45,64 @@ const getStylePrompt = (style) => {
   }
 };
 
+// Helper to generate image buffer (Google Imagen 3 API with Pollinations Flux fallback)
+const generateImageBuffer = async (enhancedPrompt, aspectRatio) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (apiKey) {
+    try {
+      console.log('Generating image using Google Imagen 3 API...');
+      
+      // Map ratios to Imagen supported options ('1:1', '3:4', '4:3', '9:16', '16:9')
+      let mappedRatio = '1:1';
+      if (aspectRatio === '16:9' || aspectRatio === '21:9') mappedRatio = '16:9';
+      else if (aspectRatio === '9:16') mappedRatio = '9:16';
+      else if (aspectRatio === '4:5') mappedRatio = '3:4';
+      
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+      const response = await axios.post(
+        endpoint,
+        {
+          instances: [
+            {
+              prompt: enhancedPrompt
+            }
+          ],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: mappedRatio,
+            outputMimeType: 'image/png'
+          }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 25000 // 25s timeout
+        }
+      );
+
+      if (response.data && response.data.predictions && response.data.predictions[0]) {
+        const base64Data = response.data.predictions[0].bytesBase64Encoded;
+        return Buffer.from(base64Data, 'base64');
+      } else {
+        throw new Error('Invalid response structure from Imagen API');
+      }
+    } catch (error) {
+      console.error('Google Imagen API failed, falling back to Pollinations Flux:', error.response?.data || error.message);
+    }
+  }
+
+  // Fallback / Default: Pollinations AI flux model
+  console.log('Generating image using Pollinations Flux...');
+  const { width, height } = getDimensions(aspectRatio);
+  const encodedPrompt = encodeURIComponent(enhancedPrompt);
+  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux-realism&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+
+  const response = await axios.get(pollinationsUrl, { responseType: 'arraybuffer', timeout: 30000 });
+  return Buffer.from(response.data, 'binary');
+};
+
 // @desc    Generate AI Image
 // @route   POST /api/image-generations
 // @access  Private
@@ -63,18 +121,8 @@ const generateImage = async (req, res) => {
       enhancedPrompt += ', professional marketing poster design composition, optimal layout for text placement, clean copy space, high-end branding visual, luxury advertising setup, crisp graphic design elements, sharp detailed textures';
     }
 
-    // Calculate dimensions
-    const { width, height } = getDimensions(aspectRatio);
-
-    // Encode prompt for URL
-    const encodedPrompt = encodeURIComponent(enhancedPrompt);
-    
-    // Pollinations AI endpoint (Flux model)
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux-realism&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
-
-    // Download image from Pollinations
-    const response = await axios.get(pollinationsUrl, { responseType: 'arraybuffer' });
-    const buffer = Buffer.from(response.data, 'binary');
+    // Generate image buffer (using Gemini Imagen 3 with Pollinations fallback)
+    const buffer = await generateImageBuffer(enhancedPrompt, aspectRatio);
 
     // Setup local static directory
     const uploadsDir = path.join(__dirname, '../public/uploads/image-generations');
@@ -163,13 +211,8 @@ const upscaleImage = async (req, res) => {
     // Enhance prompt with style modifiers
     const enhancedPrompt = generation.prompt.trim() + getStylePrompt(generation.style) + ', highly detailed textures, masterfully rendered';
 
-    // Calculate dimensions at 1.5x scale
-    const { width, height } = getDimensions(generation.aspectRatio, true);
-    const encodedPrompt = encodeURIComponent(enhancedPrompt);
-    const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux-realism&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
-
-    const response = await axios.get(pollinationsUrl, { responseType: 'arraybuffer' });
-    const buffer = Buffer.from(response.data, 'binary');
+    // Generate image buffer (using Gemini Imagen 3 with Pollinations fallback)
+    const buffer = await generateImageBuffer(enhancedPrompt, generation.aspectRatio);
 
     const uploadsDir = path.join(__dirname, '../public/uploads/image-generations');
     
