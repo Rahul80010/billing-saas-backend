@@ -38,7 +38,8 @@ const getNotifications = async (req, res) => {
               user: req.user._id,
               title: 'Payment Reminder Alert',
               message: `Udhaar payment reminder for customer "${bill.customerName}" (Invoice: #INV-${bill._id.toString().substring(0, 6).toUpperCase()}, ID: ${bill._id}). Outstanding amount: ₹${bill.remainingAmount}. Set reminder date: ${reminderDate.toLocaleDateString(undefined, { dateStyle: 'medium' })}.`,
-              type: 'credit'
+              type: 'credit',
+              link: '/credit'
             });
           }
         }

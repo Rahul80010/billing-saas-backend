@@ -146,7 +146,8 @@ const createBill = async (req, res) => {
         message: paymentType === 'Credit' 
           ? `Invoice generated with outstanding credit of ₹${finalRemainingAmount} for customer "${customerName}".`
           : `Invoice #INV-${createdBill._id.toString().substring(0,6).toUpperCase()} generated for customer "${customerName}" (Amount: ₹${finalTotal}).`,
-        type: paymentType === 'Credit' ? 'credit' : 'system'
+        type: paymentType === 'Credit' ? 'credit' : 'system',
+        link: paymentType === 'Credit' ? '/credit' : '/sales-history'
       });
     } catch (notifErr) {
       console.error('Failed to create bill notification:', notifErr);
@@ -167,14 +168,16 @@ const createBill = async (req, res) => {
               user: req.user._id,
               title: 'Out of Stock Alert',
               message: `Product "${updatedProduct.name}" is completely out of stock!`,
-              type: 'stock'
+              type: 'stock',
+              link: '/products'
             });
           } else if (updatedProduct.stock <= 5) {
             await Notification.create({
               user: req.user._id,
               title: 'Low Stock Warning',
               message: `Product "${updatedProduct.name}" is running low on stock. Only ${updatedProduct.stock} items left.`,
-              type: 'stock'
+              type: 'stock',
+              link: '/products'
             });
           }
         }
@@ -347,7 +350,8 @@ const recordPayment = async (req, res) => {
         user: req.user._id,
         title: 'Payment Recorded',
         message: `Received payment of ₹${actualPayment} for bill #INV-${bill._id.toString().substring(0,6).toUpperCase()} of customer "${bill.customerName}". Remaining: ₹${bill.remainingAmount}.`,
-        type: 'credit'
+        type: 'credit',
+        link: '/credit'
       });
     } catch (notifErr) {
       console.error('Failed to create payment notification:', notifErr);
@@ -438,7 +442,8 @@ const recordCustomerPayment = async (req, res) => {
         user: req.user._id,
         title: 'Bulk Payment Settlement',
         message: `Settled payment of ₹${(originalPaymentAmount - paymentAmount).toFixed(2)} across ${modifiedBills.length} credit invoices for customer "${customerName}".`,
-        type: 'credit'
+        type: 'credit',
+        link: '/credit'
       });
     } catch (notifErr) {
       console.error('Failed to create bulk payment notification:', notifErr);

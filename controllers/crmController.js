@@ -213,7 +213,8 @@ const createCampaign = async (req, res) => {
         user: req.user._id,
         title: 'WhatsApp Campaign Dispatched',
         message: `Campaign "${name}" has been processed. Successfully sent to ${successfulSends}/${recipients.length} recipients.`,
-        type: 'campaign'
+        type: 'campaign',
+        link: '/crm'
       });
     } catch (notifErr) {
       console.error('Failed to create campaign notification:', notifErr);

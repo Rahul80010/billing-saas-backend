@@ -23,6 +23,10 @@ const NotificationSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  link: {
+    type: String,
+    default: ''
+  },
   createdAt: {
     type: Date,
     default: Date.now
