@@ -13,11 +13,11 @@ const generateToken = (id) => {
 // @route   POST /api/auth/register
 // @access  Public
 const registerUser = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, businessPhone } = req.body;
 
   try {
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Please add all fields' });
+    if (!name || !email || !password || !businessPhone) {
+      return res.status(400).json({ message: 'Please add all fields including contact number' });
     }
 
     if (password.length < 6) {
@@ -44,12 +44,14 @@ const registerUser = async (req, res) => {
       // Reuse the unverified record
       user.name = name;
       user.password = password; // Pre-save hook hashes this on save
+      user.businessPhone = businessPhone;
     } else {
       // Create new user
       user = new User({
         name,
         email: email.toLowerCase(),
         password,
+        businessPhone,
       });
     }
 
