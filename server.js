@@ -41,6 +41,7 @@ app.use('/api/webhooks', require('./routes/webhookRoutes'));
 app.use('/api/crm', require('./routes/crmRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/image-generations', require('./routes/imageGenerationRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {

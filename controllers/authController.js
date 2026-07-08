@@ -89,6 +89,10 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email: email.toLowerCase() });
 
     if (user && (await user.matchPassword(password))) {
+      if (user.isBlocked) {
+        return res.status(403).json({ message: 'Your account has been suspended. Please contact support.' });
+      }
+
       // If user is not verified, block login and send new OTP
       if (!user.isVerified) {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -109,6 +113,7 @@ const loginUser = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        isAdmin: user.isAdmin,
         token: generateToken(user._id),
       });
     } else {
@@ -150,6 +155,7 @@ const verifyOtp = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      isAdmin: user.isAdmin,
       token: generateToken(user._id),
     });
   } catch (error) {
