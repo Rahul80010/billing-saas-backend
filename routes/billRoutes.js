@@ -12,6 +12,7 @@ const {
   sendCustomerWhatsAppReminder,
   updateBillReminderDate,
   updateCustomerReminderDate,
+  parseVoiceBill,
 } = require('../controllers/billController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -21,6 +22,7 @@ router.get('/:id/pdf', getBillPdf);
 // Protect all other routes
 router.use(protect);
 
+router.post('/parse-voice', parseVoiceBill);
 router.get('/credit/stats', getCreditStats);
 router.post('/customer/:phone/payments', recordCustomerPayment);
 router.post('/customer/:phone/whatsapp-reminder', sendCustomerWhatsAppReminder);

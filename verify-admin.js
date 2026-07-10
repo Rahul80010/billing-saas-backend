@@ -12,7 +12,7 @@ async function run() {
   await mongoose.connect(dbUri);
   console.log('Connected!');
 
-  const email = 'detalogy@gmail.com';
+  const email = 'maazabusiness3@gmail.com';
 
   const user = await User.findOne({ email });
   if (!user) {

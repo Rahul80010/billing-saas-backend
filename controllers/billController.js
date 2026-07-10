@@ -798,6 +798,97 @@ const updateCustomerReminderDate = async (req, res) => {
   }
 };
 
+// @desc    Parse voice transcription and map to product catalog using Gemini AI
+// @route   POST /api/bills/parse-voice
+// @access  Private
+const parseVoiceBill = async (req, res) => {
+  const { text, catalog } = req.body;
+
+  if (!text) {
+    return res.status(400).json({ message: 'Transcription text is required' });
+  }
+
+  if (!catalog || !Array.isArray(catalog) || catalog.length === 0) {
+    return res.status(400).json({ message: 'Store product catalog is required' });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ message: 'Gemini API Key is not configured in backend env.' });
+  }
+
+  try {
+    const axios = require('axios');
+    const mongoose = require('mongoose');
+
+    const prompt = `
+You are a voice billing assistant for a store. 
+You are given:
+1. A store product catalog (as a JSON array of objects with id and name): ${JSON.stringify(catalog)}
+2. A voice transcription (in English, Hindi, or Hinglish): "${text}"
+
+Match the spoken items to the closest products in the catalog.
+For each matched item, extract:
+- id: The matching product ID from the catalog.
+- quantity: The numerical quantity spoken. Default to 1 if no quantity is specified.
+
+Respond ONLY with a valid JSON array of objects, containing 'id' and 'quantity' properties.
+Example output format: [{"id": "...", "quantity": 2}]
+Do NOT include markdown syntax, code block formatting (like \`\`\`json), or any extra explanation. 
+If no items match, return an empty array [].
+`;
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    
+    const response = await axios.post(geminiUrl, {
+      contents: [{
+        parts: [{ text: prompt }]
+      }]
+    });
+
+    const candidateText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!candidateText) {
+      return res.status(500).json({ message: 'Failed to retrieve response from Gemini AI' });
+    }
+
+    // Clean JSON code blocks if Gemini returns them
+    let cleanedText = candidateText.trim();
+    if (cleanedText.startsWith('```')) {
+      cleanedText = cleanedText.replace(/^```(json)?/, '').replace(/```$/, '').trim();
+    }
+
+    let matchedItems = [];
+    try {
+      matchedItems = JSON.parse(cleanedText);
+    } catch (parseErr) {
+      console.error('Failed to parse Gemini response as JSON. Cleaned response was:', cleanedText);
+      return res.status(500).json({ message: 'Gemini AI returned invalid JSON output format' });
+    }
+
+    if (!Array.isArray(matchedItems)) {
+      matchedItems = [];
+    }
+
+    // Load full product documents from the database
+    const items = [];
+    for (const item of matchedItems) {
+      if (!item.id || !mongoose.Types.ObjectId.isValid(item.id)) continue;
+      const product = await Product.findOne({ _id: item.id, user: req.user._id });
+      if (product) {
+        items.push({
+          product,
+          quantity: Number(item.quantity) || 1
+        });
+      }
+    }
+
+    res.json({ items });
+  } catch (error) {
+    console.error('Error in parseVoiceBill:', error.message);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getBills,
   createBill,
@@ -810,5 +901,6 @@ module.exports = {
   sendCustomerWhatsAppReminder,
   updateBillReminderDate,
   updateCustomerReminderDate,
+  parseVoiceBill,
 };
 
