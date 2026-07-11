@@ -42,6 +42,7 @@ app.use('/api/crm', require('./routes/crmRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/image-generations', require('./routes/imageGenerationRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {
