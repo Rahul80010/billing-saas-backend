@@ -1,6 +1,85 @@
 const axios = require('axios');
 
-// @desc    Chat with Mohuri AI Assistant product expert (Local Resolver)
+const Product = require('../models/Product');
+const Bill = require('../models/Bill');
+
+// Helper to query and calculate store statistics from MongoDB
+const getStoreStats = async (userId) => {
+  try {
+    const products = await Product.find({ userId });
+    const bills = await Bill.find({ userId });
+
+    // Sales calculations
+    const totalSales = bills.reduce((sum, b) => sum + (b.total || 0), 0);
+    const totalCredit = bills.reduce((sum, b) => sum + (b.remainingAmount || 0), 0);
+
+    // Today's sales
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayBills = bills.filter(b => new Date(b.createdAt) >= today);
+    const todaySales = todayBills.reduce((sum, b) => sum + (b.total || 0), 0);
+
+    // Low stock items
+    const lowStock = products.filter(p => p.stock !== undefined && p.stock <= 5).map(p => `${p.name} (${p.stock} left)`);
+
+    // Credit by customer
+    const customerCreditMap = {};
+    bills.forEach(b => {
+      if (b.remainingAmount > 0 && b.customerPhone) {
+        const key = `${b.customerName || 'Unknown'} (${b.customerPhone})`;
+        customerCreditMap[key] = (customerCreditMap[key] || 0) + b.remainingAmount;
+      }
+    });
+
+    const topDebtors = Object.entries(customerCreditMap)
+      .map(([customer, amount]) => ({ customer, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+
+    // Product sales quantities
+    const productSalesMap = {};
+    bills.forEach(b => {
+      if (Array.isArray(b.items)) {
+        b.items.forEach(item => {
+          const name = item.productName || 'Unknown';
+          productSalesMap[name] = (productSalesMap[name] || 0) + (item.quantity || 0);
+        });
+      }
+    });
+
+    const topProducts = Object.entries(productSalesMap)
+      .map(([product, quantity]) => ({ product, quantity }))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    return {
+      totalProductsCount: products.length,
+      totalBillsCount: bills.length,
+      totalSales,
+      todaySales,
+      totalCredit,
+      lowStockList: lowStock.slice(0, 8),
+      topDebtorsList: topDebtors,
+      topProductsList: topProducts,
+      productsSummary: products.map(p => ({ name: p.name, price: p.price, stock: p.stock, barcode: p.barcode || 'N/A' }))
+    };
+  } catch (err) {
+    console.error('Failed to calculate store stats:', err);
+    return {
+      totalProductsCount: 0,
+      totalBillsCount: 0,
+      totalSales: 0,
+      todaySales: 0,
+      totalCredit: 0,
+      lowStockList: [],
+      topDebtorsList: [],
+      topProductsList: [],
+      productsSummary: []
+    };
+  }
+};
+
+// @desc    Chat with Mohuri AI Assistant product expert (Live DB Resolver)
 // @route   POST /api/ai/chat
 // @access  Private
 const chatWithAssistant = async (req, res) => {
@@ -11,174 +90,118 @@ const chatWithAssistant = async (req, res) => {
   }
 
   const query = message.toLowerCase().trim();
+  const apiKey = process.env.GEMINI_API_KEY;
 
-  // 1. Billing / Create Invoice
-  if (
-    query.includes('bill') || 
-    query.includes('invoice') || 
-    query.includes('create') || 
-    query.includes('billing') || 
-    query.includes('tax') || 
-    query.includes('print') || 
-    query.includes('pdf') ||
-    query.includes('download') ||
-    query.includes('karo') || 
-    query.includes('banaye')
-  ) {
-    return res.json({
-      reply: `📄 **How to Manage Billing & Invoices in Mohuri:**\n\n` +
-             `1. **Create a Bill**: Go to the **Billing** page. You can search & select products from your "Inventory" or switch to "Add Manually" for a custom one-off item.\n` +
-             `2. **Voice Assistant**: Click the glowing mic icon to speak out orders (e.g. *"2 kg sugar aur 3 piece bread"*).\n` +
-             `3. **Barcode Scanning**: Scan product barcodes globally using a USB gun scanner, or click the Camera button to scan EAN/UPC labels with your phone camera.\n` +
-             `4. **Save & Share**: Select payment type (**Paid** or **Credit/Udhaar**) and click **Generate Bill**. You can open/print the tax PDF (A4, A5, thermal roll size) and share reminders on WhatsApp!`
+  try {
+    const stats = await getStoreStats(req.user._id);
+
+    // If Gemini API Key is missing, fall back to smart local JS calculations on MongoDB records
+    if (!apiKey) {
+      let reply = '';
+      if (
+        query.includes('sale') || 
+        query.includes('today') || 
+        query.includes('kitna kamaya') || 
+        query.includes('selling') || 
+        query.includes('earn') ||
+        query.includes('dhandha')
+      ) {
+        reply = `📊 **Sales Statistics (Live Local DB Calculation):**\n\n` +
+                `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
+                `- **Total Sales (All Time)**: ₹${stats.totalSales.toFixed(2)}\n` +
+                `- **Top-Selling Items**: ${stats.topProductsList.map(p => `${p.product} (${p.quantity} sold)`).join(', ') || 'No sales recorded yet.'}\n\n` +
+                `*Tip: Please add GEMINI_API_KEY to your Railway dashboard environment variables to enable conversational AI replies!*`;
+      } else if (
+        query.includes('udhaar') || 
+        query.includes('credit') || 
+        query.includes('debt') || 
+        query.includes('due') || 
+        query.includes('baaki') ||
+        query.includes('payment')
+      ) {
+        reply = `💸 **Credit & Udhaar Ledger Dues (Live Local DB Calculation):**\n\n` +
+                `- **Total Outstanding Dues**: ₹${stats.totalCredit.toFixed(2)}\n` +
+                `- **Top Debtors Outstanding**:\n` +
+                (stats.topDebtorsList.map(d => `  * ${d.customer}: ₹${d.amount.toFixed(2)}`).join('\n') || '  * No outstanding credit dues.') + `\n\n` +
+                `*Tip: Please add GEMINI_API_KEY to your Railway dashboard environment variables to enable conversational AI replies!*`;
+      } else if (
+        query.includes('stock') || 
+        query.includes('inventory') || 
+        query.includes('product') || 
+        query.includes('item')
+      ) {
+        reply = `📦 **Inventory Stock Summary (Live Local DB Calculation):**\n\n` +
+                `- **Total Products in Catalog**: ${stats.totalProductsCount} items\n` +
+                `- **Low Stock Items**: ${stats.lowStockList.join(', ') || 'All items have healthy stock levels!'}\n\n` +
+                `*Tip: Please add GEMINI_API_KEY to your Railway dashboard environment variables to enable conversational AI replies!*`;
+      } else {
+        reply = `👋 Hello! Here is your live database summary:\n\n` +
+                `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
+                `- **Total Outstanding Credit**: ₹${stats.totalCredit.toFixed(2)}\n` +
+                `- **Total Products**: ${stats.totalProductsCount} items\n\n` +
+                `*Note: To unlock natural conversational AI chatting, please configure GEMINI_API_KEY in your Railway environment settings.*`;
+      }
+      return res.json({ reply });
+    }
+
+    // Call Gemini with Live Store Database Summary injected as Context
+    const axios = require('axios');
+    const prompt = `
+You are the official Mohuri AI Assistant, a friendly and professional product expert & business analyst for Mohuri - a premium SaaS billing & invoicing platform built by Detalogy.
+
+YOUR PERSONALITY:
+- Speak like a friendly customer support executive.
+- Keep your answers short, clear, and easy to understand (usually 2-4 sentences max).
+- You can understand and respond in English, Hindi, or Hinglish (mixed Hindi-English), matching the language the user speaks to you.
+
+LIVE STORE DATABASE SUMMARY (Current merchant stats from MongoDB):
+- Merchant Name: ${req.user.name}
+- Store Business Name: ${req.user.businessName || req.user.name || 'MOHURI'}
+- Total Sales to date: ₹${stats.totalSales.toFixed(2)}
+- Today's Sales: ₹${stats.todaySales.toFixed(2)}
+- Total Outstanding Credit (Udhaar): ₹${stats.totalCredit.toFixed(2)}
+- Total Products in Catalog: ${stats.totalProductsCount}
+- Total Bills Issued: ${stats.totalBillsCount}
+- Top Debtors (Outstanding Credit): ${JSON.stringify(stats.topDebtorsList)}
+- Top Selling Products (by quantity): ${JSON.stringify(stats.topProductsList)}
+- Low Stock Products: ${JSON.stringify(stats.lowStockList)}
+- Full Product Catalog (Name, Price, Stock, Barcode): ${JSON.stringify(stats.productsSummary.slice(0, 30))}
+
+MOHURI SOFTWARE HELP DOCUMENTATION:
+- Billing: Billing page lets you select from inventory or manual inputs, select Paid/Credit, use voice activation, scan barcodes, print PDF invoice and share on WhatsApp.
+- Products: Products page lets you manage catalog name, price, buying cost, stock, unit, EAN barcodes (using camera scan or scan machine gun).
+- Credit Ledger: Credit page monitors outstanding dues, record customer payments, and send WhatsApp reminders with UPI QR codes.
+- CRM Campaigns: Settings page links WhatsApp API, CRM page sends bulk festival offers / campaign templates to customers.
+- Offline Mode: Works offline via browser IndexedDB caching, queues pending bills, synchronizes using "Sync Now" button when online.
+
+Your task is to answer the user's question. If they ask about their store stats (like sales, credit, top products, stock), use the LIVE STORE DATABASE SUMMARY above to answer accurately! If they ask how to use a feature, use the help documentation.
+
+USER QUESTION: "${message}"
+YOUR ANSWER:
+`;
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    
+    const response = await axios.post(geminiUrl, {
+      contents: [{
+        parts: [{ text: prompt }]
+      }]
     });
-  }
 
-  // 2. Products / Inventory
-  if (
-    query.includes('product') || 
-    query.includes('item') || 
-    query.includes('inventory') || 
-    query.includes('stock') || 
-    query.includes('price') || 
-    query.includes('gst') || 
-    query.includes('barcode') ||
-    query.includes('buying') ||
-    query.includes('cost')
-  ) {
-    return res.json({
-      reply: `📦 **How to Manage Products & Inventory:**\n\n` +
-             `1. Go to the **Products** page to view, add, or edit your items.\n` +
-             `2. Enter the Product Name, Price (selling rate), GST (%), Stock Quantity, Unit (pcs/kg), and Buying Cost (for profit calculations).\n` +
-             `3. **Barcode Setup**: You can scan product barcodes directly using a scanner machine gun or tap the **Camera Icon** next to the input to scan it with your phone's camera.\n` +
-             `4. Saving a product automatically indexes it, making it searchable instantly on the checkout page!`
-    });
-  }
+    const reply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!reply) {
+      return res.status(500).json({ message: 'Failed to retrieve response from Gemini AI' });
+    }
 
-  // 3. Credit / Udhaar Management
-  if (
-    query.includes('udhaar') || 
-    query.includes('credit') || 
-    query.includes('payment') || 
-    query.includes('pay') || 
-    query.includes('remind') || 
-    query.includes('reminder') ||
-    query.includes('due') ||
-    query.includes('date') ||
-    query.includes('qr') ||
-    query.includes('upi')
-  ) {
-    return res.json({
-      reply: `💸 **How Udhaar (Credit) Management Works:**\n\n` +
-             `1. **Record Credit**: During checkout on the billing page, select **Credit (Udhaar)**, set a Reminder Date, and enter any initial payment amount.\n` +
-             `2. **Customer Ledger**: The remaining unpaid balance is automatically logged under the customer's profile in the **Customers** directory.\n` +
-             `3. **Credit Dashboard**: Open the **Credit** dashboard to view overall outstanding balances, record customer repayments, and send WhatsApp reminders.\n` +
-             `4. **UPI Payments**: If you enter a UPI ID in Settings, your WhatsApp reminder messages will automatically include a secure UPI payment link and dynamic collection QR code!`
-    });
+    res.json({ reply: reply.trim() });
+  } catch (error) {
+    console.error('Error in chatWithAssistant:', error.message);
+    res.status(500).json({ message: error.message });
   }
+};
 
-  // 4. WhatsApp & CRM Campaigns
-  if (
-    query.includes('whatsapp') || 
-    query.includes('crm') || 
-    query.includes('campaign') || 
-    query.includes('marketing') || 
-    query.includes('offer') || 
-    query.includes('bulk') ||
-    query.includes('connect') ||
-    query.includes('template')
-  ) {
-    return res.json({
-      reply: `💬 **WhatsApp Connection & CRM Marketing Offers:**\n\n` +
-             `1. **Connect WhatsApp**: Go to **Settings** and link your WhatsApp API or scan the QR code to connect your business account.\n` +
-             `2. **Custom Templates**: You can configure custom billing reminder templates in settings using placeholders like {customerName}, {remainingAmount}, and {invoiceNo}.\n` +
-             `3. **CRM Bulk Campaigns**: Go to the **CRM** page, write your campaign message, select your audience from your customer list, and send promotions or festival offers directly via WhatsApp!`
-    });
-  }
-
-  // 5. Offline Billing
-  if (
-    query.includes('offline') || 
-    query.includes('internet') || 
-    query.includes('connection') || 
-    query.includes('network') || 
-    query.includes('sync')
-  ) {
-    return res.json({
-      reply: `🔌 **How Offline Billing Works in Mohuri:**\n\n` +
-             `1. **Zero Disconnection**: If your internet drops, you can continue to check out. Mohuri uses browser IndexedDB caching to load products/customers and save offline invoices locally.\n` +
-             `2. **Offline Indicator**: A banner will appear at the top showing the number of offline-saved bills.\n` +
-             `3. **Cloud Sync**: Once internet is restored, simply click **Sync Now** on the top banner. All pending offline bills will automatically write to your central cloud database.`
-    });
-  }
-
-  // 6. Reports & Sales stats
-  if (
-    query.includes('report') || 
-    query.includes('sales') || 
-    query.includes('profit') || 
-    query.includes('analytic') || 
-    query.includes('stat') ||
-    query.includes('today') ||
-    query.includes('sale')
-  ) {
-    return res.json({
-      reply: `📊 **Reports & Live Store Statistics:**\n\n` +
-             `- Go to the **Dashboard** to view aggregate sales graphs, total profits, total credit summaries, and low-stock indicators.\n` +
-             `- *Note*: Live database querying through chat (like asking *"How much sale did I do today?"*) is currently in preparation. Our systems are fully future-ready, and this automated stats feature will launch in the next update!`
-    });
-  }
-
-  // 7. Settings & Profile
-  if (
-    query.includes('setting') || 
-    query.includes('profile') || 
-    query.includes('update') || 
-    query.includes('business') || 
-    query.includes('address') || 
-    query.includes('phone')
-  ) {
-    return res.json({
-      reply: `⚙️ **Updating Settings & Store Profile:**\n\n` +
-             `- Go to the **Settings** page in the sidebar.\n` +
-             `- Update your store name, billing address, and phone number.\n` +
-             `- **UPI Configuration**: Enter your UPI ID (e.g. *upi@okaxis*) and UPI merchant name to enable automated credit QR generation on invoices.\n` +
-             `- **Custom Reminders**: Set up your custom default reminder text templates for WhatsApp shares.`
-    });
-  }
-
-  // 8. General Greetings
-  if (
-    query.includes('hello') || 
-    query.includes('hi') || 
-    query.includes('hey') || 
-    query.includes('welcome') ||
-    query.includes('help') ||
-    query.includes('assistant') ||
-    query.includes('support')
-  ) {
-    return res.json({
-      reply: `👋 Hello! I am your Mohuri AI Assistant.\n\n` +
-             `I can guide you through every feature of our software. Try asking me:\n` +
-             `- *"How do I create a bill?"*\n` +
-             `- *"How do I add a product?"*\n` +
-             `- *"How does Udhaar work?"*\n` +
-             `- *"How do I connect WhatsApp?"*\n` +
-             `- *"How does offline billing work?"*`
-    });
-  }
-
-  // 9. Generic Fallback
-  return res.json({
-    reply: `🤖 **Mohuri AI Support Executive:**\n\n` +
-           `I couldn't match that query to a specific Mohuri module. As your product support expert, I can help you with:\n\n` +
-           `- **Billing & Voice Commands** (creating paid/credit bills)\n` +
-           `- **Inventory & Barcodes** (adding items with camera scans)\n` +
-           `- **Udhaar & Credit Dashboard** (recording customer balances & sending UPI QR links)\n` +
-           `- **WhatsApp CRM Marketing** (bulk messages & templates)\n` +
-           `- **Offline Mode** (IndexDB storage and cloud synchronization)\n\n` +
-           `Please ask about any of these features, or select one of our suggested questions below!`
-  });
+module.exports = {
+  chatWithAssistant,
 };
 
 module.exports = {
