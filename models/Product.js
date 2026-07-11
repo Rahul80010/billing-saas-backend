@@ -36,6 +36,11 @@ const productSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  barcode: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', productSchema);
