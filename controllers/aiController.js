@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-// @desc    Chat with Mohuri AI Assistant product expert
+// @desc    Chat with Mohuri AI Assistant product expert (Local Resolver)
 // @route   POST /api/ai/chat
 // @access  Private
 const chatWithAssistant = async (req, res) => {
@@ -10,82 +10,175 @@ const chatWithAssistant = async (req, res) => {
     return res.status(400).json({ message: 'Message is required' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ message: 'Gemini API Key is not configured in backend env.' });
-  }
+  const query = message.toLowerCase().trim();
 
-  try {
-    const prompt = `
-You are the official Mohuri AI Assistant, a friendly and professional product expert for Mohuri - a premium SaaS billing & invoicing platform built by Detalogy.
-
-YOUR PERSONALITY:
-- Speak like a friendly customer support executive.
-- Keep your answers short, clear, and easy to understand (usually 2-4 sentences max).
-- Never give technical database or code explanations unless specifically asked.
-- You can understand and respond in English, Hindi, or Hinglish (mixed Hindi-English), matching the language the user speaks to you.
-
-MOHURI FEATURES DOCUMENTATION:
-1. Creating a Bill / Billing:
-   - Go to the "Billing" page in the navigation bar.
-   - Choose from "Choose from Inventory" to select saved products or click "Add Manually" for a custom one-off item.
-   - Select the payment type: "Paid" or "Credit (Udhaar)".
-   - To add items using Voice, click the "Voice Assistant" button (pulsing mic) and speak (e.g. "2 kg sugar aur 1 packet milk").
-   - To scan barcodes, scan using your barcode gun anywhere on the screen, or click the "Camera" scan icon next to the scan input to scan with your phone camera.
-   - Click "Generate Bill" to complete. After generation, you can print/open PDF invoice and share it directly on WhatsApp.
-2. Products / Inventory:
-   - Go to "Products" to create, view, edit or delete products.
-   - You can specify product Name, Price, optional Buying Cost, GST Rate (%), Stock Quantity, Unit (pcs/kg), and a Barcode.
-   - You can scan the barcode using a scanner machine gun directly or click the Camera button to scan a barcode using your device camera.
-3. Customers:
-   - Go to "Customers" to see the list of your customers, their total outstanding balance, and transaction history.
-4. Credit / Udhaar Management:
-   - When creating a bill, select "Credit (Udhaar)". Set a "Reminder Date" and enter how much they paid today (default 0).
-   - The remaining amount will show up in the customer's ledger.
-   - On the "Credit" dashboard, you can record customer payments (partial or full settlement) and send WhatsApp payment reminders.
-   - If you have configured a UPI ID in settings, a WhatsApp reminder message will automatically include a secure UPI payment link and QR code.
-5. WhatsApp Integration & CRM (WhatsApp Marketing):
-   - Go to "Settings" and connect your WhatsApp Business API / WhatsApp QR.
-   - Go to "CRM" to compose and dispatch bulk marketing campaigns and offers directly to your customer base.
-   - You can customize the WhatsApp Reminder template in Settings (e.g., customize placeholders like {customerName}, {remainingAmount}, {invoiceNo}, {reminderDate}).
-6. Invoice & PDF:
-   - After generating any invoice, you can download it as a tax-compliant PDF.
-   - Support A4, A5, and 3-inch thermal printer roll configurations.
-7. Offline Billing Support:
-   - Mohuri works offline! If your internet disconnects, you can still search products, add items, and save bills locally.
-   - Stored offline bills will show in an orange banner on the screen.
-   - When connection returns, click "Sync Now" to synchronize all offline bills with the live server database.
-8. Settings & Profile:
-   - Go to "Settings" to update business name, address, phone number, UPI ID for QR collections, and WhatsApp integration templates.
-9. Reports:
-   - View sales, profit, and business reports inside the dashboard.
-
-IMPORTANT CONSTRAINTS:
-- Do NOT perform database actions, check real-time user sales, or fetch specific credit totals.
-- If the user asks database-specific stats questions (e.g., "how much sale did I do today?" or "who owes me the most credit?"), respond politely that you are configured for help/support queries only right now, but your systems are future-ready to connect to their live ledger statistics soon!
-
-USER QUESTION: "${message}"
-YOUR ANSWER:
-`;
-
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    
-    const response = await axios.post(geminiUrl, {
-      contents: [{
-        parts: [{ text: prompt }]
-      }]
+  // 1. Billing / Create Invoice
+  if (
+    query.includes('bill') || 
+    query.includes('invoice') || 
+    query.includes('create') || 
+    query.includes('billing') || 
+    query.includes('tax') || 
+    query.includes('print') || 
+    query.includes('pdf') ||
+    query.includes('download') ||
+    query.includes('karo') || 
+    query.includes('banaye')
+  ) {
+    return res.json({
+      reply: `📄 **How to Manage Billing & Invoices in Mohuri:**\n\n` +
+             `1. **Create a Bill**: Go to the **Billing** page. You can search & select products from your "Inventory" or switch to "Add Manually" for a custom one-off item.\n` +
+             `2. **Voice Assistant**: Click the glowing mic icon to speak out orders (e.g. *"2 kg sugar aur 3 piece bread"*).\n` +
+             `3. **Barcode Scanning**: Scan product barcodes globally using a USB gun scanner, or click the Camera button to scan EAN/UPC labels with your phone camera.\n` +
+             `4. **Save & Share**: Select payment type (**Paid** or **Credit/Udhaar**) and click **Generate Bill**. You can open/print the tax PDF (A4, A5, thermal roll size) and share reminders on WhatsApp!`
     });
-
-    const reply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!reply) {
-      return res.status(500).json({ message: 'Failed to retrieve response from Gemini AI' });
-    }
-
-    res.json({ reply: reply.trim() });
-  } catch (error) {
-    console.error('Error in chatWithAssistant:', error.message);
-    res.status(500).json({ message: error.message });
   }
+
+  // 2. Products / Inventory
+  if (
+    query.includes('product') || 
+    query.includes('item') || 
+    query.includes('inventory') || 
+    query.includes('stock') || 
+    query.includes('price') || 
+    query.includes('gst') || 
+    query.includes('barcode') ||
+    query.includes('buying') ||
+    query.includes('cost')
+  ) {
+    return res.json({
+      reply: `📦 **How to Manage Products & Inventory:**\n\n` +
+             `1. Go to the **Products** page to view, add, or edit your items.\n` +
+             `2. Enter the Product Name, Price (selling rate), GST (%), Stock Quantity, Unit (pcs/kg), and Buying Cost (for profit calculations).\n` +
+             `3. **Barcode Setup**: You can scan product barcodes directly using a scanner machine gun or tap the **Camera Icon** next to the input to scan it with your phone's camera.\n` +
+             `4. Saving a product automatically indexes it, making it searchable instantly on the checkout page!`
+    });
+  }
+
+  // 3. Credit / Udhaar Management
+  if (
+    query.includes('udhaar') || 
+    query.includes('credit') || 
+    query.includes('payment') || 
+    query.includes('pay') || 
+    query.includes('remind') || 
+    query.includes('reminder') ||
+    query.includes('due') ||
+    query.includes('date') ||
+    query.includes('qr') ||
+    query.includes('upi')
+  ) {
+    return res.json({
+      reply: `💸 **How Udhaar (Credit) Management Works:**\n\n` +
+             `1. **Record Credit**: During checkout on the billing page, select **Credit (Udhaar)**, set a Reminder Date, and enter any initial payment amount.\n` +
+             `2. **Customer Ledger**: The remaining unpaid balance is automatically logged under the customer's profile in the **Customers** directory.\n` +
+             `3. **Credit Dashboard**: Open the **Credit** dashboard to view overall outstanding balances, record customer repayments, and send WhatsApp reminders.\n` +
+             `4. **UPI Payments**: If you enter a UPI ID in Settings, your WhatsApp reminder messages will automatically include a secure UPI payment link and dynamic collection QR code!`
+    });
+  }
+
+  // 4. WhatsApp & CRM Campaigns
+  if (
+    query.includes('whatsapp') || 
+    query.includes('crm') || 
+    query.includes('campaign') || 
+    query.includes('marketing') || 
+    query.includes('offer') || 
+    query.includes('bulk') ||
+    query.includes('connect') ||
+    query.includes('template')
+  ) {
+    return res.json({
+      reply: `💬 **WhatsApp Connection & CRM Marketing Offers:**\n\n` +
+             `1. **Connect WhatsApp**: Go to **Settings** and link your WhatsApp API or scan the QR code to connect your business account.\n` +
+             `2. **Custom Templates**: You can configure custom billing reminder templates in settings using placeholders like {customerName}, {remainingAmount}, and {invoiceNo}.\n` +
+             `3. **CRM Bulk Campaigns**: Go to the **CRM** page, write your campaign message, select your audience from your customer list, and send promotions or festival offers directly via WhatsApp!`
+    });
+  }
+
+  // 5. Offline Billing
+  if (
+    query.includes('offline') || 
+    query.includes('internet') || 
+    query.includes('connection') || 
+    query.includes('network') || 
+    query.includes('sync')
+  ) {
+    return res.json({
+      reply: `🔌 **How Offline Billing Works in Mohuri:**\n\n` +
+             `1. **Zero Disconnection**: If your internet drops, you can continue to check out. Mohuri uses browser IndexedDB caching to load products/customers and save offline invoices locally.\n` +
+             `2. **Offline Indicator**: A banner will appear at the top showing the number of offline-saved bills.\n` +
+             `3. **Cloud Sync**: Once internet is restored, simply click **Sync Now** on the top banner. All pending offline bills will automatically write to your central cloud database.`
+    });
+  }
+
+  // 6. Reports & Sales stats
+  if (
+    query.includes('report') || 
+    query.includes('sales') || 
+    query.includes('profit') || 
+    query.includes('analytic') || 
+    query.includes('stat') ||
+    query.includes('today') ||
+    query.includes('sale')
+  ) {
+    return res.json({
+      reply: `📊 **Reports & Live Store Statistics:**\n\n` +
+             `- Go to the **Dashboard** to view aggregate sales graphs, total profits, total credit summaries, and low-stock indicators.\n` +
+             `- *Note*: Live database querying through chat (like asking *"How much sale did I do today?"*) is currently in preparation. Our systems are fully future-ready, and this automated stats feature will launch in the next update!`
+    });
+  }
+
+  // 7. Settings & Profile
+  if (
+    query.includes('setting') || 
+    query.includes('profile') || 
+    query.includes('update') || 
+    query.includes('business') || 
+    query.includes('address') || 
+    query.includes('phone')
+  ) {
+    return res.json({
+      reply: `⚙️ **Updating Settings & Store Profile:**\n\n` +
+             `- Go to the **Settings** page in the sidebar.\n` +
+             `- Update your store name, billing address, and phone number.\n` +
+             `- **UPI Configuration**: Enter your UPI ID (e.g. *upi@okaxis*) and UPI merchant name to enable automated credit QR generation on invoices.\n` +
+             `- **Custom Reminders**: Set up your custom default reminder text templates for WhatsApp shares.`
+    });
+  }
+
+  // 8. General Greetings
+  if (
+    query.includes('hello') || 
+    query.includes('hi') || 
+    query.includes('hey') || 
+    query.includes('welcome') ||
+    query.includes('help') ||
+    query.includes('assistant') ||
+    query.includes('support')
+  ) {
+    return res.json({
+      reply: `👋 Hello! I am your Mohuri AI Assistant.\n\n` +
+             `I can guide you through every feature of our software. Try asking me:\n` +
+             `- *"How do I create a bill?"*\n` +
+             `- *"How do I add a product?"*\n` +
+             `- *"How does Udhaar work?"*\n` +
+             `- *"How do I connect WhatsApp?"*\n` +
+             `- *"How does offline billing work?"*`
+    });
+  }
+
+  // 9. Generic Fallback
+  return res.json({
+    reply: `🤖 **Mohuri AI Support Executive:**\n\n` +
+           `I couldn't match that query to a specific Mohuri module. As your product support expert, I can help you with:\n\n` +
+           `- **Billing & Voice Commands** (creating paid/credit bills)\n` +
+           `- **Inventory & Barcodes** (adding items with camera scans)\n` +
+           `- **Udhaar & Credit Dashboard** (recording customer balances & sending UPI QR links)\n` +
+           `- **WhatsApp CRM Marketing** (bulk messages & templates)\n` +
+           `- **Offline Mode** (IndexDB storage and cloud synchronization)\n\n` +
+           `Please ask about any of these features, or select one of our suggested questions below!`
+  });
 };
 
 module.exports = {
