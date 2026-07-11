@@ -106,11 +106,10 @@ const chatWithAssistant = async (req, res) => {
         query.includes('earn') ||
         query.includes('dhandha')
       ) {
-        reply = `📊 **Sales Statistics (Live Local DB Calculation):**\n\n` +
+        reply = `📊 **Sales Statistics:**\n\n` +
                 `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
                 `- **Total Sales (All Time)**: ₹${stats.totalSales.toFixed(2)}\n` +
-                `- **Top-Selling Items**: ${stats.topProductsList.map(p => `${p.product} (${p.quantity} sold)`).join(', ') || 'No sales recorded yet.'}\n\n` +
-                `*Tip: Please add GEMINI_API_KEY to your Railway dashboard environment variables to enable conversational AI replies!*`;
+                `- **Top-Selling Items**: ${stats.topProductsList.map(p => `${p.product} (${p.quantity} sold)`).join(', ') || 'No sales recorded yet.'}`;
       } else if (
         query.includes('udhaar') || 
         query.includes('credit') || 
@@ -119,27 +118,25 @@ const chatWithAssistant = async (req, res) => {
         query.includes('baaki') ||
         query.includes('payment')
       ) {
-        reply = `💸 **Credit & Udhaar Ledger Dues (Live Local DB Calculation):**\n\n` +
+        reply = `💸 **Credit & Udhaar Ledger Dues:**\n\n` +
                 `- **Total Outstanding Dues**: ₹${stats.totalCredit.toFixed(2)}\n` +
-                `- **Top Debtors Outstanding**:\n` +
-                (stats.topDebtorsList.map(d => `  * ${d.customer}: ₹${d.amount.toFixed(2)}`).join('\n') || '  * No outstanding credit dues.') + `\n\n` +
-                `*Tip: Please add GEMINI_API_KEY to your Railway dashboard environment variables to enable conversational AI replies!*`;
+                `- **Top Customer Dues**:\n` +
+                (stats.topDebtorsList.map(d => `  * ${d.customer}: ₹${d.amount.toFixed(2)}`).join('\n') || '  * No outstanding credit dues.');
       } else if (
         query.includes('stock') || 
         query.includes('inventory') || 
         query.includes('product') || 
         query.includes('item')
       ) {
-        reply = `📦 **Inventory Stock Summary (Live Local DB Calculation):**\n\n` +
+        reply = `📦 **Inventory Stock Summary:**\n\n` +
                 `- **Total Products in Catalog**: ${stats.totalProductsCount} items\n` +
-                `- **Low Stock Items**: ${stats.lowStockList.join(', ') || 'All items have healthy stock levels!'}\n\n` +
-                `*Tip: Please add GEMINI_API_KEY to your Railway dashboard environment variables to enable conversational AI replies!*`;
+                `- **Low Stock Items**: ${stats.lowStockList.join(', ') || 'All items have healthy stock levels!'}`;
       } else {
         reply = `👋 Hello! Here is your live database summary:\n\n` +
                 `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
                 `- **Total Outstanding Credit**: ₹${stats.totalCredit.toFixed(2)}\n` +
                 `- **Total Products**: ${stats.totalProductsCount} items\n\n` +
-                `*Note: To unlock natural conversational AI chatting, please configure GEMINI_API_KEY in your Railway environment settings.*`;
+                `How can I help you manage your store today?`;
       }
       return res.json({ reply });
     }
