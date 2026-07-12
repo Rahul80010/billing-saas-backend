@@ -95,7 +95,98 @@ const chatWithAssistant = async (req, res) => {
 
     // If Gemini API Key is missing, fall back to smart local JS calculations on MongoDB records
     if (!apiKey) {
-      let reply = '';
+      // --- HELP / SOFTWARE GUIDE QUERIES ---
+
+      // 1. Billing / Create Invoice Guide
+      if (
+        (query.includes('bill') || query.includes('invoice') || query.includes('billing') || query.includes('receipt')) &&
+        (query.includes('how') || query.includes('kaise') || query.includes('create') || query.includes('banaye') || query.includes('karo') || query.includes('print'))
+      ) {
+        return res.json({
+          reply: `📄 **Billing & Invoice Creation Guide:**\n\n` +
+                 `1. Go to the **Billing** page from the sidebar.\n` +
+                 `2. Choose from **Inventory** to select saved products or use **Add Manually** for custom items.\n` +
+                 `3. **Fast Barcode Scan**: Scan with a USB gun anywhere on the screen, or click the **Camera icon** to scan EAN/UPC barcodes using your phone camera.\n` +
+                 `4. **Voice commands**: Tap the pulsing microphone button and speak (e.g., *"2 kg sugar aur 1 packet milk"*).\n` +
+                 `5. Select **Paid** or **Credit (Udhaar)** payment method and click **Generate Bill** to save, print (A4, A5, thermal roll size), and share the PDF invoice directly on WhatsApp!`
+        });
+      }
+
+      // 2. Add / Manage Product Guide
+      if (
+        (query.includes('product') || query.includes('item') || query.includes('inventory')) &&
+        (query.includes('add') || query.includes('create') || query.includes('how') || query.includes('kaise') || query.includes('nayan') || query.includes('edit'))
+      ) {
+        return res.json({
+          reply: `📦 **Product & Inventory Management Guide:**\n\n` +
+                 `1. Go to the **Products** page from the sidebar.\n` +
+                 `2. Click the **Add Product** form field.\n` +
+                 `3. Enter the Product Name, Price (selling rate), GST (%), Stock, and Buying Cost (to calculate profit margins).\n` +
+                 `4. **Barcode setup**: Scan EAN barcodes using your camera scanner or machine gun directly in the form input field.\n` +
+                 `5. Click **Save** to index the product, making it searchable instantly on the checkout page!`
+        });
+      }
+
+      // 3. Add Customer Guide
+      if (
+        query.includes('customer') &&
+        (query.includes('add') || query.includes('create') || query.includes('how') || query.includes('kaise') || query.includes('new'))
+      ) {
+        return res.json({
+          reply: `👤 **Customer Management Guide:**\n\n` +
+                 `1. Go to the **Customers** page from the sidebar.\n` +
+                 `2. You can view all registered customer names, phone numbers, registration dates, and outstanding credit balances.\n` +
+                 `3. A new customer is automatically created and saved whenever you generate a bill under their name and phone number on the checkout page!`
+        });
+      }
+
+      // 4. Send Offers / CRM Guide
+      if (
+        query.includes('offer') || 
+        query.includes('crm') || 
+        query.includes('campaign') || 
+        query.includes('marketing') || 
+        query.includes('bulk')
+      ) {
+        return res.json({
+          reply: `💬 **WhatsApp CRM & Marketing Offers Guide:**\n\n` +
+                 `1. **Connect Account**: Go to **Settings** and scan the WhatsApp QR/API connection.\n` +
+                 `2. **Send Offers**: Go to the **CRM** page in the sidebar.\n` +
+                 `3. Compose your promotion/marketing offer message text.\n` +
+                 `4. Select target audience filters (e.g. active customer base, or debtors list).\n` +
+                 `5. Click **Send** to dispatch bulk marketing messages directly via WhatsApp!`
+        });
+      }
+
+      // 5. Udhaar / Credit Guide
+      if (
+        query.includes('udhaar') || 
+        query.includes('credit')
+      ) {
+        // If it's not a stats query (e.g., not asking how much or who owes balance), return the usage guide
+        if (!(query.includes('how much') || query.includes('kitna') || query.includes('check') || query.includes('kiska') || query.includes('bal') || query.includes('list'))) {
+          return res.json({
+            reply: `💸 **How Credit (Udhaar) Management Works:**\n\n` +
+                   `1. **Record Udhaar**: During checkout, select payment method **Credit (Udhaar)**, set a Reminder Date, and specify any downpayment amount.\n` +
+                   `2. **Automated Reminders**: Open the **Credit** dashboard to view outstanding dues, log partial settlements, and click **Send WhatsApp Reminder**.\n` +
+                   `3. **UPI Payment Link**: Entering your UPI ID in **Settings** automatically appends a secure payment link and collection QR code to all WhatsApp reminder messages!`
+          });
+        }
+      }
+
+      // 6. Offline mode guide
+      if (query.includes('offline') || query.includes('internet') || query.includes('indexeddb') || query.includes('sync')) {
+        return res.json({
+          reply: `🔌 **Offline Mode & Cloud Sync Guide:**\n\n` +
+                 `- Mohuri stores products locally in browser IndexedDB. If internet is down, you can still query inventory and save bills.\n` +
+                 `- Unsynced invoices will display in an orange banner on the screen.\n` +
+                 `- When you settle connection, click **Sync Now** to upload cached sales to the server.`
+        });
+      }
+
+      // --- STATS / DATABASE DATA QUERIES ---
+
+      // 7. Sales Stats
       if (
         query.includes('sale') || 
         query.includes('today') || 
@@ -103,83 +194,57 @@ const chatWithAssistant = async (req, res) => {
         query.includes('selling') || 
         query.includes('earn') ||
         query.includes('dhandha') ||
-        query.includes('history') ||
-        query.includes('invoice') ||
-        query.includes('bill') ||
-        query.includes('create') ||
-        query.includes('karo') ||
-        query.includes('banaye')
+        query.includes('report')
       ) {
-        reply = `📊 **Sales & Billing Statistics (Live Local DB Calculation):**\n\n` +
-                `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
-                `- **Total Sales (All Time)**: ₹${stats.totalSales.toFixed(2)}\n` +
-                `- **Total Bills Issued**: ${stats.totalBillsCount} bills\n` +
-                `- **Top-Selling Items**: ${stats.topProductsList.map(p => `${p.product} (${p.quantity} sold)`).join(', ') || 'No sales recorded yet.'}\n\n` +
-                `*Guide*: Go to the **Billing** page in the sidebar. You can search products, add items manually, scan barcodes (via USB gun or mobile camera), or click the pulsing microphone icon to streams voice items (e.g. *"2 kg sugar aur 1 packet milk"*). Select **Paid** or **Credit/Udhaar** and click **Generate Bill**!`;
-      } else if (
+        return res.json({
+          reply: `📊 **Sales & Billing Statistics:**\n\n` +
+                 `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
+                 `- **Total Sales (All Time)**: ₹${stats.totalSales.toFixed(2)}\n` +
+                 `- **Total Bills Issued**: ${stats.totalBillsCount} bills\n` +
+                 `- **Top-Selling Items**: ${stats.topProductsList.map(p => `${p.product} (${p.quantity} sold)`).join(', ') || 'No sales recorded yet.'}`
+        });
+      }
+
+      // 8. Credit Dues Stats
+      if (
         query.includes('udhaar') || 
         query.includes('credit') || 
         query.includes('debt') || 
         query.includes('due') || 
         query.includes('baaki') ||
-        query.includes('payment') ||
-        query.includes('pay') ||
-        query.includes('remind') ||
-        query.includes('reminder') ||
-        query.includes('due') ||
-        query.includes('date') ||
-        query.includes('qr') ||
-        query.includes('upi')
+        query.includes('kiska') ||
+        query.includes('payment')
       ) {
-        reply = `💸 **Credit & Udhaar Ledger (Live Local DB Calculation):**\n\n` +
-                `- **Total Outstanding Dues**: ₹${stats.totalCredit.toFixed(2)}\n` +
-                `- **Top Debtors Outstanding**:\n` +
-                (stats.topDebtorsList.map(d => `  * ${d.customer}: ₹${d.amount.toFixed(2)}`).join('\n') || '  * No outstanding credit dues.') + `\n\n` +
-                `*Guide*: Settle balance on the **Credit** dashboard. You can send automated WhatsApp reminder messages containing secure UPI payment links and dynamic collections QR codes by setting up your **UPI ID** under the **Settings** page!`;
-      } else if (
+        return res.json({
+          reply: `💸 **Credit & Udhaar Ledger Outstanding Dues:**\n\n` +
+                 `- **Total Outstanding Dues**: ₹${stats.totalCredit.toFixed(2)}\n` +
+                 `- **Top Customer Dues**:\n` +
+                 (stats.topDebtorsList.map(d => `  * ${d.customer}: ₹${d.amount.toFixed(2)}`).join('\n') || '  * No outstanding credit dues.')
+        });
+      }
+
+      // 9. Inventory Stock Stats
+      if (
         query.includes('stock') || 
         query.includes('inventory') || 
         query.includes('product') || 
-        query.includes('item') ||
-        query.includes('add product') ||
-        query.includes('create product')
+        query.includes('item')
       ) {
-        reply = `📦 **Inventory & Products Catalog (Live Local DB Calculation):**\n\n` +
-                `- **Total Products in Catalog**: ${stats.totalProductsCount} items\n` +
-                `- **Low Stock Items**: ${stats.lowStockList.join(', ') || 'All items have healthy stock levels!'}\n\n` +
-                `*Guide*: Go to the **Products** page to add items with Name, Price, Buying Cost (for profit calculations), GST %, and EAN Barcodes (scan using gun or camera).`;
-      } else if (
-        query.includes('whatsapp') || 
-        query.includes('crm') || 
-        query.includes('campaign') || 
-        query.includes('marketing') || 
-        query.includes('offer') || 
-        query.includes('bulk') ||
-        query.includes('connect') ||
-        query.includes('template')
-      ) {
-        reply = `💬 **WhatsApp CRM & Campaigns Guide:**\n\n` +
-                `- **Connect WhatsApp**: Go to **Settings** -> WhatsApp Settings to scan the QR/API connection.\n` +
-                `- **Bulk Campaigns**: Go to **CRM** in the sidebar. Compose your offer message, select your audience filters (all, active, or debtors), and dispatch bulk marketing messages directly via WhatsApp!\n` +
-                `- **Reminder Templates**: Customize your billing messages templates in settings using dynamic variables like {customerName}, {remainingAmount}, and {invoiceNo}.`;
-      } else if (
-        query.includes('offline') || 
-        query.includes('internet') || 
-        query.includes('connection') || 
-        query.includes('sync')
-      ) {
-        reply = `🔌 **Offline Mode & Caching:**\n\n` +
-                `- **Offline Billing**: Mohuri caches your product catalog in IndexedDB. If internet is down, checkout still works!\n` +
-                `- **Orange Banner**: Lists pending unsynced offline sales on the screen.\n` +
-                `- **Cloud Sync**: Settle connection and tap **Sync Now** to upload all local cash bills to the database.`;
-      } else {
-        reply = `👋 Hello! Here is your live database summary:\n\n` +
-                `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
-                `- **Total Outstanding Credit**: ₹${stats.totalCredit.toFixed(2)}\n` +
-                `- **Total Products**: ${stats.totalProductsCount} items\n\n` +
-                `How can I help you manage your store today?`;
+        return res.json({
+          reply: `📦 **Inventory & Stock Summary:**\n\n` +
+                 `- **Total Products in Catalog**: ${stats.totalProductsCount} items\n` +
+                 `- **Low Stock Items**: ${stats.lowStockList.join(', ') || 'All items have healthy stock levels!'}`
+        });
       }
-      return res.json({ reply });
+
+      // 10. Default General summary / greetings fallback
+      return res.json({
+        reply: `👋 Hello! I am your Mohuri AI Assistant.\n\n` +
+               `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
+               `- **Total Outstanding Credit**: ₹${stats.totalCredit.toFixed(2)}\n` +
+               `- **Total Products in Catalog**: ${stats.totalProductsCount} items\n\n` +
+               `How can I help you manage your store today?`
+      });
     }
 
     // Call Gemini with Live Store Database Summary injected as Context
