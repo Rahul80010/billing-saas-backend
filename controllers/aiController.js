@@ -1,5 +1,3 @@
-const axios = require('axios');
-
 const Product = require('../models/Product');
 const Bill = require('../models/Bill');
 
@@ -79,7 +77,7 @@ const getStoreStats = async (userId) => {
   }
 };
 
-// @desc    Chat with Mohuri AI Assistant product expert (Live DB Resolver)
+// @desc    Chat with Mohuri AI Assistant product expert (Live DB + Trained Knowledge base)
 // @route   POST /api/ai/chat
 // @access  Private
 const chatWithAssistant = async (req, res) => {
@@ -104,33 +102,76 @@ const chatWithAssistant = async (req, res) => {
         query.includes('kitna kamaya') || 
         query.includes('selling') || 
         query.includes('earn') ||
-        query.includes('dhandha')
+        query.includes('dhandha') ||
+        query.includes('history') ||
+        query.includes('invoice') ||
+        query.includes('bill') ||
+        query.includes('create') ||
+        query.includes('karo') ||
+        query.includes('banaye')
       ) {
-        reply = `📊 **Sales Statistics:**\n\n` +
+        reply = `📊 **Sales & Billing Statistics (Live Local DB Calculation):**\n\n` +
                 `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
                 `- **Total Sales (All Time)**: ₹${stats.totalSales.toFixed(2)}\n` +
-                `- **Top-Selling Items**: ${stats.topProductsList.map(p => `${p.product} (${p.quantity} sold)`).join(', ') || 'No sales recorded yet.'}`;
+                `- **Total Bills Issued**: ${stats.totalBillsCount} bills\n` +
+                `- **Top-Selling Items**: ${stats.topProductsList.map(p => `${p.product} (${p.quantity} sold)`).join(', ') || 'No sales recorded yet.'}\n\n` +
+                `*Guide*: Go to the **Billing** page in the sidebar. You can search products, add items manually, scan barcodes (via USB gun or mobile camera), or click the pulsing microphone icon to streams voice items (e.g. *"2 kg sugar aur 1 packet milk"*). Select **Paid** or **Credit/Udhaar** and click **Generate Bill**!`;
       } else if (
         query.includes('udhaar') || 
         query.includes('credit') || 
         query.includes('debt') || 
         query.includes('due') || 
         query.includes('baaki') ||
-        query.includes('payment')
+        query.includes('payment') ||
+        query.includes('pay') ||
+        query.includes('remind') ||
+        query.includes('reminder') ||
+        query.includes('due') ||
+        query.includes('date') ||
+        query.includes('qr') ||
+        query.includes('upi')
       ) {
-        reply = `💸 **Credit & Udhaar Ledger Dues:**\n\n` +
+        reply = `💸 **Credit & Udhaar Ledger (Live Local DB Calculation):**\n\n` +
                 `- **Total Outstanding Dues**: ₹${stats.totalCredit.toFixed(2)}\n` +
-                `- **Top Customer Dues**:\n` +
-                (stats.topDebtorsList.map(d => `  * ${d.customer}: ₹${d.amount.toFixed(2)}`).join('\n') || '  * No outstanding credit dues.');
+                `- **Top Debtors Outstanding**:\n` +
+                (stats.topDebtorsList.map(d => `  * ${d.customer}: ₹${d.amount.toFixed(2)}`).join('\n') || '  * No outstanding credit dues.') + `\n\n` +
+                `*Guide*: Settle balance on the **Credit** dashboard. You can send automated WhatsApp reminder messages containing secure UPI payment links and dynamic collections QR codes by setting up your **UPI ID** under the **Settings** page!`;
       } else if (
         query.includes('stock') || 
         query.includes('inventory') || 
         query.includes('product') || 
-        query.includes('item')
+        query.includes('item') ||
+        query.includes('add product') ||
+        query.includes('create product')
       ) {
-        reply = `📦 **Inventory Stock Summary:**\n\n` +
+        reply = `📦 **Inventory & Products Catalog (Live Local DB Calculation):**\n\n` +
                 `- **Total Products in Catalog**: ${stats.totalProductsCount} items\n` +
-                `- **Low Stock Items**: ${stats.lowStockList.join(', ') || 'All items have healthy stock levels!'}`;
+                `- **Low Stock Items**: ${stats.lowStockList.join(', ') || 'All items have healthy stock levels!'}\n\n` +
+                `*Guide*: Go to the **Products** page to add items with Name, Price, Buying Cost (for profit calculations), GST %, and EAN Barcodes (scan using gun or camera).`;
+      } else if (
+        query.includes('whatsapp') || 
+        query.includes('crm') || 
+        query.includes('campaign') || 
+        query.includes('marketing') || 
+        query.includes('offer') || 
+        query.includes('bulk') ||
+        query.includes('connect') ||
+        query.includes('template')
+      ) {
+        reply = `💬 **WhatsApp CRM & Campaigns Guide:**\n\n` +
+                `- **Connect WhatsApp**: Go to **Settings** -> WhatsApp Settings to scan the QR/API connection.\n` +
+                `- **Bulk Campaigns**: Go to **CRM** in the sidebar. Compose your offer message, select your audience filters (all, active, or debtors), and dispatch bulk marketing messages directly via WhatsApp!\n` +
+                `- **Reminder Templates**: Customize your billing messages templates in settings using dynamic variables like {customerName}, {remainingAmount}, and {invoiceNo}.`;
+      } else if (
+        query.includes('offline') || 
+        query.includes('internet') || 
+        query.includes('connection') || 
+        query.includes('sync')
+      ) {
+        reply = `🔌 **Offline Mode & Caching:**\n\n` +
+                `- **Offline Billing**: Mohuri caches your product catalog in IndexedDB. If internet is down, checkout still works!\n` +
+                `- **Orange Banner**: Lists pending unsynced offline sales on the screen.\n` +
+                `- **Cloud Sync**: Settle connection and tap **Sync Now** to upload all local cash bills to the database.`;
       } else {
         reply = `👋 Hello! Here is your live database summary:\n\n` +
                 `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
@@ -164,12 +205,40 @@ LIVE STORE DATABASE SUMMARY (Current merchant stats from MongoDB):
 - Low Stock Products: ${JSON.stringify(stats.lowStockList)}
 - Full Product Catalog (Name, Price, Stock, Barcode): ${JSON.stringify(stats.productsSummary.slice(0, 30))}
 
-MOHURI SOFTWARE HELP DOCUMENTATION:
-- Billing: Billing page lets you select from inventory or manual inputs, select Paid/Credit, use voice activation, scan barcodes, print PDF invoice and share on WhatsApp.
-- Products: Products page lets you manage catalog name, price, buying cost, stock, unit, EAN barcodes (using camera scan or scan machine gun).
-- Credit Ledger: Credit page monitors outstanding dues, record customer payments, and send WhatsApp reminders with UPI QR codes.
-- CRM Campaigns: Settings page links WhatsApp API, CRM page sends bulk festival offers / campaign templates to customers.
-- Offline Mode: Works offline via browser IndexedDB caching, queues pending bills, synchronizes using "Sync Now" button when online.
+MOHURI DETAILED SOFTWARE TRAINING DOCUMENTATION:
+1. Billing / Create Invoice:
+   - Go to the "Billing" page in the navigation bar.
+   - Choose from "Choose from Inventory" to select saved products or click "Add Manually" for a custom one-off item.
+   - Select the payment type: "Paid" or "Credit (Udhaar)".
+   - To add items using Voice, click the "Voice Assistant" button (pulsing mic) and speak (e.g. "2 kg sugar aur 1 packet milk").
+   - To scan barcodes, scan using your barcode gun anywhere on the screen, or click the "Camera" scan icon next to the scan input to scan with your phone camera.
+   - Click "Generate Bill" to complete. After generation, you can print/open PDF invoice and share it directly on WhatsApp.
+2. Products / Inventory:
+   - Go to "Products" to create, view, edit or delete products.
+   - You can specify product Name, Price, optional Buying Cost, GST Rate (%), Stock Quantity, Unit (pcs/kg), and a Barcode.
+   - You can scan the barcode using a scanner machine gun directly or click the Camera button to scan a barcode using your device camera.
+3. Customers:
+   - Go to "Customers" to see the list of your customers, their total outstanding balance, and transaction history.
+4. Credit / Udhaar Management:
+   - When creating a bill, select "Credit (Udhaar)". Set a "Reminder Date" and enter how much they paid today (default 0).
+   - The remaining amount will show up in the customer's ledger.
+   - On the "Credit" dashboard, you can record customer payments (partial or full settlement) and send WhatsApp payment reminders.
+   - If you have configured a UPI ID in settings, a WhatsApp reminder message will automatically include a secure UPI payment link and QR code.
+5. WhatsApp Integration & CRM (WhatsApp Marketing):
+   - Go to "Settings" and connect your WhatsApp Business API / WhatsApp QR.
+   - Go to "CRM" to compose and dispatch bulk marketing campaigns and offers directly to your customer base.
+   - You can customize the WhatsApp Reminder template in Settings (e.g., customize placeholders like {customerName}, {remainingAmount}, {invoiceNo}, {reminderDate}).
+6. Invoice & PDF:
+   - After generating any invoice, you can download it as a tax-compliant PDF.
+   - Support A4, A5, and 3-inch thermal printer roll configurations.
+7. Offline Billing Support:
+   - Mohuri works offline! If your internet disconnects, you can still search products, add items, and save bills locally.
+   - Stored offline bills will show in an orange banner on the screen.
+   - When connection returns, click "Sync Now" to synchronize all offline bills with the live server database.
+8. Settings & Profile:
+   - Go to "Settings" to update business name, address, phone number, UPI ID for QR collections, and WhatsApp integration templates.
+9. Reports:
+   - View sales, profit, and business reports inside the dashboard.
 
 Your task is to answer the user's question. If they ask about their store stats (like sales, credit, top products, stock), use the LIVE STORE DATABASE SUMMARY above to answer accurately! If they ask how to use a feature, use the help documentation.
 
@@ -195,10 +264,6 @@ YOUR ANSWER:
     console.error('Error in chatWithAssistant:', error.message);
     res.status(500).json({ message: error.message });
   }
-};
-
-module.exports = {
-  chatWithAssistant,
 };
 
 module.exports = {
