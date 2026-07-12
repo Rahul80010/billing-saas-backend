@@ -121,7 +121,7 @@ const chatWithAssistant = async (req, res) => {
           reply: `📦 **Product & Inventory Management Guide:**\n\n` +
                  `1. Go to the **Products** page from the sidebar.\n` +
                  `2. Click the **Add Product** form field.\n` +
-                 `3. Enter the Product Name, Price (selling rate), GST (%), Stock, and Buying Cost (to calculate profit margins).\n` +
+                 `3. Enter the Product Name, Price (selling rate), GST (%), Stock, and Buying Cost (to calculate profit margins).\n" +
                  `4. **Barcode setup**: Scan EAN barcodes using your camera scanner or machine gun directly in the form input field.\n` +
                  `5. Click **Save** to index the product, making it searchable instantly on the checkout page!`
         });
@@ -174,7 +174,30 @@ const chatWithAssistant = async (req, res) => {
         }
       }
 
-      // 6. Offline mode guide
+      // 6. Support Contact Info & Helpline details
+      if (
+        query.includes('contact') || 
+        query.includes('number') || 
+        query.includes('phone') || 
+        query.includes('call') || 
+        query.includes('helpline') || 
+        query.includes('support') ||
+        query.includes('email') ||
+        query.includes('address') ||
+        query.includes('helpdesk') ||
+        query.includes('developer') ||
+        query.includes('detalogy')
+      ) {
+        return res.json({
+          reply: `📞 **Mohuri Support Desk (Detalogy):**\n\n` +
+                 `- **WhatsApp & Phone Support**: +91 76799 37056\n` +
+                 `- **Support Email**: support@detalogy.com\n` +
+                 `- **Working Hours**: Monday to Saturday, 9:00 AM - 7:00 PM IST\n\n` +
+                 `Please contact us if you need help, have queries, or want customized updates!`
+        });
+      }
+
+      // 7. Offline mode guide
       if (query.includes('offline') || query.includes('internet') || query.includes('indexeddb') || query.includes('sync')) {
         return res.json({
           reply: `🔌 **Offline Mode & Cloud Sync Guide:**\n\n` +
@@ -186,7 +209,7 @@ const chatWithAssistant = async (req, res) => {
 
       // --- STATS / DATABASE DATA QUERIES ---
 
-      // 7. Sales Stats
+      // 8. Sales Stats
       if (
         query.includes('sale') || 
         query.includes('today') || 
@@ -205,7 +228,7 @@ const chatWithAssistant = async (req, res) => {
         });
       }
 
-      // 8. Credit Dues Stats
+      // 9. Credit Dues Stats
       if (
         query.includes('udhaar') || 
         query.includes('credit') || 
@@ -223,7 +246,7 @@ const chatWithAssistant = async (req, res) => {
         });
       }
 
-      // 9. Inventory Stock Stats
+      // 10. Inventory Stock Stats
       if (
         query.includes('stock') || 
         query.includes('inventory') || 
@@ -237,7 +260,7 @@ const chatWithAssistant = async (req, res) => {
         });
       }
 
-      // 10. Default General summary / greetings fallback
+      // 11. Default General summary / greetings fallback
       return res.json({
         reply: `👋 Hello! I am your Mohuri AI Assistant.\n\n` +
                `- **Today's Sales**: ₹${stats.todaySales.toFixed(2)}\n` +
@@ -269,6 +292,12 @@ LIVE STORE DATABASE SUMMARY (Current merchant stats from MongoDB):
 - Top Selling Products (by quantity): ${JSON.stringify(stats.topProductsList)}
 - Low Stock Products: ${JSON.stringify(stats.lowStockList)}
 - Full Product Catalog (Name, Price, Stock, Barcode): ${JSON.stringify(stats.productsSummary.slice(0, 30))}
+
+MOHURI OFFICIAL CONTACT & SUPPORT HELPDESK INFO:
+- Support Email: support@detalogy.com
+- Phone Helpline & WhatsApp Support: +91 76799 37056
+- Working Hours: Monday to Saturday, 9:00 AM to 7:00 PM IST
+- Developed/Owned by: Detalogy
 
 MOHURI DETAILED SOFTWARE TRAINING DOCUMENTATION:
 1. Billing / Create Invoice:
@@ -305,7 +334,7 @@ MOHURI DETAILED SOFTWARE TRAINING DOCUMENTATION:
 9. Reports:
    - View sales, profit, and business reports inside the dashboard.
 
-Your task is to answer the user's question. If they ask about their store stats (like sales, credit, top products, stock), use the LIVE STORE DATABASE SUMMARY above to answer accurately! If they ask how to use a feature, use the help documentation.
+Your task is to answer the user's question. If they ask about support channels, helpline numbers, or developer contact information, use the MOHURI OFFICIAL CONTACT & SUPPORT HELPDESK INFO to answer accurately!
 
 USER QUESTION: "${message}"
 YOUR ANSWER:
