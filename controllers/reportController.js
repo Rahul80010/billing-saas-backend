@@ -20,13 +20,13 @@ const getDateBounds = (timeframe, customStart, customEnd) => {
     start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
     end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
   } else if (timeframe === 'weekly') {
-    const weekly = new Date();
-    weekly.setDate(weekly.getDate() - 7);
-    start = new Date(weekly.getFullYear(), weekly.getMonth(), weekly.getDate(), 0, 0, 0, 0);
+    const monday = new Date(now);
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    monday.setDate(diff);
+    start = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0, 0);
   } else if (timeframe === 'monthly') {
-    const monthly = new Date();
-    monthly.setDate(monthly.getDate() - 30);
-    start = new Date(monthly.getFullYear(), monthly.getMonth(), monthly.getDate(), 0, 0, 0, 0);
+    start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   } else if (timeframe === 'yearly') {
     start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
   } else if (timeframe === 'custom' && customStart && customEnd) {
@@ -99,9 +99,13 @@ const getReportDashboard = async (req, res) => {
       }
     });
 
-    // Monthly revenue trend (last 12 months)
+    // Monthly revenue trend (last 12 months, independent of active filter timeframe)
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    const billsForTrend = await Bill.find({ userId, createdAt: { $gte: twelveMonthsAgo } });
+
     const monthlyRevenueMap = {};
-    bills.forEach(b => {
+    billsForTrend.forEach(b => {
       const date = new Date(b.createdAt);
       const key = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
       monthlyRevenueMap[key] = (monthlyRevenueMap[key] || 0) + (b.total || 0);
