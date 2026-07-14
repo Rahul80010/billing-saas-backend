@@ -30,9 +30,10 @@ const getDateBounds = (timeframe, customStart, customEnd) => {
   } else if (timeframe === 'yearly') {
     start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
   } else if (timeframe === 'custom' && customStart && customEnd) {
-    start = new Date(customStart);
-    end = new Date(customEnd);
-    end.setHours(23, 59, 59, 999);
+    const [sYr, sMon, sDay] = customStart.split('-').map(Number);
+    const [eYr, eMon, eDay] = customEnd.split('-').map(Number);
+    start = new Date(sYr, sMon - 1, sDay, 0, 0, 0, 0);
+    end = new Date(eYr, eMon - 1, eDay, 23, 59, 59, 999);
   }
   return { start, end };
 };
