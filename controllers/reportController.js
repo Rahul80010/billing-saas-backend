@@ -6,17 +6,51 @@ const Purchase = require('../models/Purchase');
 const Expense = require('../models/Expense');
 const axios = require('axios');
 
+// Helper function to calculate date bounds based on timeframe
+const getDateBounds = (timeframe, customStart, customEnd) => {
+  const now = new Date();
+  let start = new Date(2000, 0, 1); // default fallback: all time
+  let end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+  if (timeframe === 'today') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  } else if (timeframe === 'yesterday') {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
+    end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+  } else if (timeframe === 'weekly') {
+    const weekly = new Date();
+    weekly.setDate(weekly.getDate() - 7);
+    start = new Date(weekly.getFullYear(), weekly.getMonth(), weekly.getDate(), 0, 0, 0, 0);
+  } else if (timeframe === 'monthly') {
+    const monthly = new Date();
+    monthly.setDate(monthly.getDate() - 30);
+    start = new Date(monthly.getFullYear(), monthly.getMonth(), monthly.getDate(), 0, 0, 0, 0);
+  } else if (timeframe === 'yearly') {
+    start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+  } else if (timeframe === 'custom' && customStart && customEnd) {
+    start = new Date(customStart);
+    end = new Date(customEnd);
+    end.setHours(23, 59, 59, 999);
+  }
+  return { start, end };
+};
+
 // @desc    Get reports dashboard data (KPI Cards & Charts datasets)
 // @route   GET /api/reports/dashboard
 // @access  Private
 const getReportDashboard = async (req, res) => {
   try {
     const userId = req.user._id;
+    const { timeframe, startDate, endDate } = req.query;
+    
+    const { start, end } = getDateBounds(timeframe || 'monthly', startDate, endDate);
 
-    // Query databases
-    const bills = await Bill.find({ userId });
-    const purchases = await Purchase.find({ userId });
-    const expenses = await Expense.find({ userId });
+    // Query databases within timeframe bounds
+    const bills = await Bill.find({ userId, createdAt: { $gte: start, $lte: end } });
+    const purchases = await Purchase.find({ userId, purchaseDate: { $gte: start, $lte: end } });
+    const expenses = await Expense.find({ userId, expenseDate: { $gte: start, $lte: end } });
     const products = await Product.find({ userId });
     const suppliers = await Supplier.find({ userId });
 
@@ -156,16 +190,11 @@ const getReportDashboard = async (req, res) => {
 const getSalesReport = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { startDate, endDate, paymentMode, status, search } = req.query;
+    const { timeframe, startDate, endDate, paymentMode, status, search } = req.query;
 
-    let filter = { userId };
+    const { start, end } = getDateBounds(timeframe || 'monthly', startDate, endDate);
 
-    if (startDate && endDate) {
-      filter.createdAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    }
+    let filter = { userId, createdAt: { $gte: start, $lte: end } };
 
     if (paymentMode && paymentMode !== 'All') {
       filter.paymentType = paymentMode;
@@ -222,7 +251,11 @@ const getSalesReport = async (req, res) => {
 const getPurchaseReport = async (req, res) => {
   try {
     const userId = req.user._id;
-    const purchases = await Purchase.find({ userId }).sort({ purchaseDate: -1 });
+    const { timeframe, startDate, endDate } = req.query;
+
+    const { start, end } = getDateBounds(timeframe || 'monthly', startDate, endDate);
+
+    const purchases = await Purchase.find({ userId, purchaseDate: { $gte: start, $lte: end } }).sort({ purchaseDate: -1 });
     
     const totalPurchase = purchases.reduce((sum, p) => sum + p.total, 0);
     const pendingSupplierPayments = purchases.reduce((sum, p) => sum + p.remainingAmount, 0);
