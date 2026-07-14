@@ -85,8 +85,7 @@ const getReportDashboard = async (req, res) => {
     bills.forEach(b => {
       if (b.items) {
         b.items.forEach(item => {
-          const itemBase = (item.price * item.quantity) / (1 + (item.gst || 0) / 100);
-          gstCollected += (item.price * item.quantity) - itemBase;
+          gstCollected += (item.price * item.quantity) * ((item.gst || 0) / 100);
         });
       }
     });
@@ -95,8 +94,7 @@ const getReportDashboard = async (req, res) => {
     purchases.forEach(p => {
       if (p.items) {
         p.items.forEach(item => {
-          const itemBase = (item.price * item.quantity) / (1 + (item.gst || 0) / 100);
-          gstPaid += (item.price * item.quantity) - itemBase;
+          gstPaid += (item.price * item.quantity) * ((item.gst || 0) / 100);
         });
       }
     });
@@ -223,8 +221,7 @@ const getSalesReport = async (req, res) => {
     bills.forEach(b => {
       if (b.items) {
         b.items.forEach(item => {
-          const itemBase = (item.price * item.quantity) / (1 + (item.gst || 0) / 100);
-          gstCollected += (item.price * item.quantity) - itemBase;
+          gstCollected += (item.price * item.quantity) * ((item.gst || 0) / 100);
         });
       }
     });
@@ -257,22 +254,20 @@ const getPurchaseReport = async (req, res) => {
 
     const purchases = await Purchase.find({ userId, purchaseDate: { $gte: start, $lte: end } }).sort({ purchaseDate: -1 });
     
-    const totalPurchase = purchases.reduce((sum, p) => sum + p.total, 0);
-    const pendingSupplierPayments = purchases.reduce((sum, p) => sum + p.remainingAmount, 0);
-
-    // Supplier purchases summaries
-    const supplierMap = {};
+    let gstPaid = 0;
     purchases.forEach(p => {
-      supplierMap[p.supplierName] = (supplierMap[p.supplierName] || 0) + p.total;
+      if (p.items) {
+        p.items.forEach(item => {
+          gstPaid += (item.price * item.quantity) * ((item.gst || 0) / 100);
+        });
+      }
     });
-
-    const supplierPurchases = Object.entries(supplierMap).map(([name, total]) => ({ name, total }));
 
     res.json({
       summary: {
         totalPurchase,
         pendingSupplierPayments,
-        gstPaid: totalPurchase * 0.18 // Approximate GST
+        gstPaid
       },
       supplierPurchases,
       purchases
