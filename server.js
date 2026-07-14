@@ -43,6 +43,7 @@ app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/image-generations', require('./routes/imageGenerationRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
+app.use('/api/reports', require('./routes/reportRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {
