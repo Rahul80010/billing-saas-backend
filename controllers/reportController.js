@@ -69,7 +69,7 @@ const getReportDashboard = async (req, res) => {
       }
     });
 
-    const netProfit = totalSales - totalSalesBuyingCost - totalExpenses;
+    const netProfit = totalSales - totalPurchase - totalExpenses;
     
     // Unique customers count
     const uniqueCustomers = new Set(bills.map(b => b.customerPhone).filter(Boolean));
