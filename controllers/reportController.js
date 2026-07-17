@@ -282,6 +282,32 @@ const getPurchaseReport = async (req, res) => {
   }
 };
 
+// @desc    Get detailed expenses list
+// @route   GET /api/reports/expenses
+// @access  Private
+const getExpenses = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { timeframe, startDate, endDate, search } = req.query;
+
+    const { start, end } = getDateBounds(timeframe || 'monthly', startDate, endDate);
+
+    let filter = { userId, expenseDate: { $gte: start, $lte: end } };
+
+    if (search) {
+      filter.$or = [
+        { category: { $regex: search, $options: 'i' } },
+        { note: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const expenses = await Expense.find(filter).sort({ expenseDate: -1 });
+    res.json(expenses);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Log a new expense manually
 // @route   POST /api/reports/expense
 // @access  Private
@@ -464,6 +490,7 @@ module.exports = {
   getReportDashboard,
   getSalesReport,
   getPurchaseReport,
+  getExpenses,
   logExpense,
   addSupplier,
   getSuppliers,

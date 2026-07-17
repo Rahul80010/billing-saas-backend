@@ -4,6 +4,7 @@ const {
   getReportDashboard,
   getSalesReport,
   getPurchaseReport,
+  getExpenses,
   logExpense,
   addSupplier,
   getSuppliers,
@@ -17,6 +18,7 @@ router.use(protect);
 router.get('/dashboard', getReportDashboard);
 router.get('/sales', getSalesReport);
 router.get('/purchases', getPurchaseReport);
+router.get('/expenses', getExpenses);
 router.post('/expense', logExpense);
 router.post('/supplier', addSupplier);
 router.get('/suppliers', getSuppliers);
