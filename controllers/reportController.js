@@ -268,6 +268,10 @@ const getPurchaseReport = async (req, res) => {
       }
     });
 
+    const totalPurchase = purchases.reduce((sum, p) => sum + (p.total || 0), 0);
+    const pendingSupplierPayments = purchases.reduce((sum, p) => sum + (p.remainingAmount || 0), 0);
+    const supplierPurchases = [];
+
     res.json({
       summary: {
         totalPurchase,
