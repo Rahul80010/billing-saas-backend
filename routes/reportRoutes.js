@@ -8,6 +8,7 @@ const {
   logExpense,
   addSupplier,
   getSuppliers,
+  recordSupplierPayment,
   logPurchase,
   generateAiInsights
 } = require('../controllers/reportController');
@@ -22,6 +23,7 @@ router.get('/expenses', getExpenses);
 router.post('/expense', logExpense);
 router.post('/supplier', addSupplier);
 router.get('/suppliers', getSuppliers);
+router.post('/suppliers/:id/pay', recordSupplierPayment);
 router.post('/purchase', logPurchase);
 router.get('/ai-insights', generateAiInsights);
 

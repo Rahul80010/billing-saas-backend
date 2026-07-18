@@ -28,6 +28,12 @@ const supplierSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  payments: [{
+    amount: { type: Number, required: true },
+    paymentDate: { type: Date, default: Date.now },
+    paymentMode: { type: String, default: 'Cash' },
+    note: { type: String, default: '' }
+  }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('Supplier', supplierSchema);

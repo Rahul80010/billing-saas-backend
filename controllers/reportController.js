@@ -375,6 +375,43 @@ const getSuppliers = async (req, res) => {
   }
 };
 
+// @desc    Record manual payment to supplier
+// @route   POST /api/reports/suppliers/:id/pay
+// @access  Private
+const recordSupplierPayment = async (req, res) => {
+  try {
+    const { amount, paymentMode, note, date } = req.body;
+    const supplierId = req.params.id;
+
+    if (!amount || Number(amount) <= 0) {
+      return res.status(400).json({ message: 'Valid payment amount is required.' });
+    }
+
+    const supplier = await Supplier.findOne({ _id: supplierId, userId: req.user._id });
+    if (!supplier) {
+      return res.status(404).json({ message: 'Supplier not found' });
+    }
+
+    const payAmt = Number(amount);
+    supplier.outstandingBalance = Math.max(0, supplier.outstandingBalance - payAmt);
+
+    if (!supplier.payments) {
+      supplier.payments = [];
+    }
+    supplier.payments.push({
+      amount: payAmt,
+      paymentMode: paymentMode || 'Cash',
+      note: note || '',
+      paymentDate: date ? new Date(date) : new Date()
+    });
+
+    await supplier.save();
+    res.json(supplier);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Log supplier purchase outflow
 // @route   POST /api/reports/purchase
 // @access  Private
@@ -498,6 +535,7 @@ module.exports = {
   logExpense,
   addSupplier,
   getSuppliers,
+  recordSupplierPayment,
   logPurchase,
   generateAiInsights
 };
