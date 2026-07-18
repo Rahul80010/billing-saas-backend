@@ -445,7 +445,7 @@ const recordSupplierPayment = async (req, res) => {
 // @access  Private
 const logPurchase = async (req, res) => {
   try {
-    const { supplierId, items, total, paidAmount, remainingAmount, status, date } = req.body;
+    const { supplierId, items, total, paidAmount, remainingAmount, status, date, updateInventory } = req.body;
 
     if (!supplierId || !total) {
       return res.status(400).json({ message: 'Supplier ID and Total amount are required.' });
@@ -472,6 +472,20 @@ const logPurchase = async (req, res) => {
     if (newPurchase.remainingAmount > 0) {
       supplier.outstandingBalance += newPurchase.remainingAmount;
       await supplier.save();
+    }
+
+    // Update inventory stock if requested & product exists in database (skip non-existing items)
+    if (updateInventory && items && items.length > 0) {
+      for (const item of items) {
+        const product = await Product.findOne({
+          userId: req.user._id,
+          name: { $regex: new RegExp(`^${item.productName.trim()}$`, 'i') }
+        });
+        if (product) {
+          product.stock = (product.stock || 0) + Number(item.quantity || 0);
+          await product.save();
+        }
+      }
     }
 
     res.status(201).json(newPurchase);
