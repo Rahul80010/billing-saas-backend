@@ -348,12 +348,40 @@ const addSupplier = async (req, res) => {
       return res.status(400).json({ message: 'Supplier Name and Phone are required.' });
     }
 
+    const normalizePhone = (p) => {
+      let cleaned = p.replace(/\s+/g, ''); // Remove spaces
+      if (!cleaned.startsWith('+')) {
+        if (cleaned.length === 10) {
+          cleaned = '+91' + cleaned;
+        } else if (cleaned.length === 12 && cleaned.startsWith('91')) {
+          cleaned = '+' + cleaned;
+        }
+      }
+      return cleaned;
+    };
+
+    const normalizedPhone = normalizePhone(phone);
+    const trimmedName = name.trim();
+
+    // Check duplicate supplier (case-insensitive name, normalized phone)
+    const existingSupplier = await Supplier.findOne({
+      userId: req.user._id,
+      $or: [
+        { phone: normalizedPhone },
+        { name: { $regex: new RegExp(`^${trimmedName}$`, 'i') } }
+      ]
+    });
+
+    if (existingSupplier) {
+      return res.status(400).json({ message: 'A supplier with this name or phone number already exists.' });
+    }
+
     const newSupplier = await Supplier.create({
       userId: req.user._id,
-      name,
-      phone,
-      email: email || '',
-      address: address || '',
+      name: trimmedName,
+      phone: normalizedPhone,
+      email: email ? email.trim() : '',
+      address: address ? address.trim() : '',
       outstandingBalance: 0
     });
 
