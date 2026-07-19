@@ -517,6 +517,22 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
         try {
           const qrSize = isA5 ? 50 : 72;
           doc.image(config.qrCodeBuffer, splitX - qrSize - 12, qrTopY, { fit: [qrSize, qrSize] });
+
+          // Draw official central UPI logo overlay in the center of the QR code
+          const qrCenterX = (splitX - 12) - (qrSize / 2);
+          const qrCenterY = qrTopY + (qrSize / 2);
+          const patchSize = isA5 ? 10 : 14;
+          
+          doc.roundedRect(qrCenterX - (patchSize / 2), qrCenterY - (patchSize / 2), patchSize, patchSize, 1).fill('#ffffff');
+          
+          // Render logo text and lines inside the patch
+          const textOffset = isA5 ? 4 : 5.5;
+          doc.fillColor('#0f3f7a').font('Roboto-Bold').fontSize(isA5 ? 3.5 : 4.5).text('UPI', qrCenterX - textOffset, qrCenterY - (isA5 ? 1.5 : 2));
+          
+          const strokeW = isA5 ? 0.6 : 0.8;
+          doc.lineWidth(strokeW);
+          doc.strokeColor('#0f3f7a').moveTo(qrCenterX + (isA5 ? 1.5 : 2.5), qrCenterY + (isA5 ? 2 : 2.5)).lineTo(qrCenterX + (isA5 ? 2.5 : 4), qrCenterY - (isA5 ? 2 : 2.5)).stroke();
+          doc.strokeColor('#2e8b57').moveTo(qrCenterX + (isA5 ? 3 : 4.5), qrCenterY + (isA5 ? 2 : 2.5)).lineTo(qrCenterX + (isA5 ? 4 : 6), qrCenterY - (isA5 ? 2 : 2.5)).stroke();
           
           // Render UPI Apps Logo Row under the QR Code
           const qrCenterX = splitX - 12 - (qrSize / 2);
