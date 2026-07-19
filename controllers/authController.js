@@ -305,7 +305,12 @@ const updateProfile = async (req, res) => {
     enableHsnField,
     enableDiscountField,
     enableAutoPrint,
-    defaultUnit
+    defaultUnit,
+    bankName,
+    bankAccountNo,
+    bankIfsc,
+    bankAccountName,
+    panNumber
   } = req.body;
 
   try {
@@ -338,6 +343,13 @@ const updateProfile = async (req, res) => {
       user.enableAutoPrint = enableAutoPrint !== undefined ? enableAutoPrint : user.enableAutoPrint;
       user.defaultUnit = defaultUnit !== undefined ? defaultUnit : user.defaultUnit;
 
+      // Bank Details
+      user.bankName = bankName !== undefined ? bankName : user.bankName;
+      user.bankAccountNo = bankAccountNo !== undefined ? bankAccountNo : user.bankAccountNo;
+      user.bankIfsc = bankIfsc !== undefined ? bankIfsc : user.bankIfsc;
+      user.bankAccountName = bankAccountName !== undefined ? bankAccountName : user.bankAccountName;
+      user.panNumber = panNumber !== undefined ? panNumber : user.panNumber;
+
       const updatedUser = await user.save();
       res.json({
         _id: updatedUser._id,
@@ -364,7 +376,12 @@ const updateProfile = async (req, res) => {
         enableHsnField: updatedUser.enableHsnField,
         enableDiscountField: updatedUser.enableDiscountField,
         enableAutoPrint: updatedUser.enableAutoPrint,
-        defaultUnit: updatedUser.defaultUnit
+        defaultUnit: updatedUser.defaultUnit,
+        bankName: updatedUser.bankName,
+        bankAccountNo: updatedUser.bankAccountNo,
+        bankIfsc: updatedUser.bankIfsc,
+        bankAccountName: updatedUser.bankAccountName,
+        panNumber: updatedUser.panNumber
       });
     } else {
       res.status(404).json({ message: 'User not found' });

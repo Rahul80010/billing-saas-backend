@@ -113,6 +113,31 @@ const userSchema = new mongoose.Schema({
     enum: ['Cash', 'Card', 'UPI', 'Credit'],
     default: 'Cash',
   },
+  bankName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  bankAccountNo: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  bankIfsc: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  bankAccountName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  panNumber: {
+    type: String,
+    trim: true,
+    default: '',
+  },
   defaultGstRate: {
     type: Number,
     default: 18,

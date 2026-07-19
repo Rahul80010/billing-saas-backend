@@ -2,6 +2,60 @@ const PDFDocument = require('pdfkit');
 const path = require('path');
 
 /**
+ * Helper to convert numbers into Indian numbering words (Rupees and Paise)
+ */
+const numberToIndianWords = (num) => {
+  if (num === 0) return 'Zero Rupees';
+  const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const g = ['', 'Thousand', 'Lakh', 'Crore'];
+
+  const helper = (n) => {
+    let str = '';
+    if (n > 99) {
+      str += a[Math.floor(n / 100)] + 'Hundred ';
+      n %= 100;
+    }
+    if (n > 19) {
+      str += b[Math.floor(n / 10)] + ' ' + a[n % 10];
+    } else if (n > 0) {
+      str += a[n];
+    }
+    return str.trim();
+  };
+
+  let cleanNum = Math.floor(num);
+  let words = '';
+
+  // Process the last 3 digits
+  let last3 = cleanNum % 1000;
+  if (last3 > 0) {
+    words = helper(last3) + ' ';
+  }
+  cleanNum = Math.floor(cleanNum / 1000);
+
+  // Process pairs of digits (Thousand, Lakh, Crore)
+  const steps = [100, 100, 100]; // Thousand, Lakh, Crore
+  for (let i = 0; i < 3 && cleanNum > 0; i++) {
+    let step = steps[i];
+    let val = cleanNum % step;
+    if (val > 0) {
+      words = helper(val) + ' ' + g[i + 1] + ' ' + words;
+    }
+    cleanNum = Math.floor(cleanNum / step);
+  }
+
+  // Handle paise if present
+  let paise = Math.round((num - Math.floor(num)) * 100);
+  let paiseWords = '';
+  if (paise > 0) {
+    paiseWords = ' and ' + helper(paise) + ' Paise';
+  }
+
+  return (words.trim() + paiseWords + ' Rupees Only').replace(/\s+/g, ' ');
+};
+
+/**
  * Generates an elegant print-friendly PDF invoice from a bill and pipes it to the HTTP response stream.
  * @param {object} bill - Mongoose Bill document
  * @param {object|string} businessConfig - Merchant's business settings or businessName string
@@ -29,7 +83,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     pdfMargin = 30;
   } else {
     pdfSize = 'A4';
-    pdfMargin = 50;
+    pdfMargin = 40; // Default grid margin is 40 points (approx 0.55 in)
   }
 
   const doc = new PDFDocument({ size: pdfSize, margin: pdfMargin });
@@ -163,166 +217,353 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(7).text(bFooter, margin, currentY, { align: 'center', width: contentWidth });
     
   } else {
-    // ---- STANDARD INVOICE LAYOUT (A4 & A5) ----
-    const fsHeader = isA5 ? 14 : 18;
-    const fsLabel = isA5 ? 7 : 8;
-    const fsNormal = isA5 ? 8 : 10;
-    const fsLarge = isA5 ? 12 : 14;
+    // ---- PROFESSIONAL INDIAN TAX INVOICE LAYOUT (A4 & A5) ----
+    
+    // Extracted PAN from GSTIN if not manually entered
+    const panNum = config.panNumber || (bGstin.length === 15 ? bGstin.slice(2, 12).toUpperCase() : '');
 
-    let startX = margin;
-    let headerY = currentY;
+    // Common styling configs
+    doc.strokeColor('#000000').lineWidth(0.5);
 
+    // 1. Merchant Header Info (Left) and TAX INVOICE detail box (Right)
+    const headerBoxHeight = isA5 ? 90 : 120;
+    const rightColX = isA5 ? 270 : 340;
+    const rightColWidth = pageWidth - margin - rightColX;
+
+    // Draw top border box
+    doc.rect(margin, currentY, contentWidth, headerBoxHeight).stroke();
+    
+    // Draw column splitter inside top box
+    doc.moveTo(rightColX, currentY).lineTo(rightColX, currentY + headerBoxHeight).stroke();
+
+    // Render Company/Merchant Details (Left Column)
+    let leftX = margin + 10;
+    let textY = currentY + 10;
+
+    // Draw logo if it exists
     if (bLogo) {
       try {
         const base64Data = bLogo.replace(/^data:image\/\w+;base64,/, "");
         const logoBuffer = Buffer.from(base64Data, 'base64');
-        const logoSize = isA5 ? 40 : 50;
-        doc.image(logoBuffer, startX, headerY, { fit: [logoSize, logoSize] });
-        startX += logoSize + 15;
+        const logoSize = isA5 ? 32 : 45;
+        doc.image(logoBuffer, leftX, textY, { fit: [logoSize, logoSize] });
+        leftX += logoSize + 10;
       } catch (imgError) {
-        console.error('Error drawing merchant logo on PDF:', imgError);
+        console.error('Error drawing logo on PDF:', imgError);
       }
     }
 
-    doc.fillColor(primaryColor).fontSize(fsHeader).font('Roboto-Bold').text(bName, startX, headerY);
-    currentY = doc.y + 5;
-
-    doc.fillColor(secondaryText).fontSize(fsLabel).font('Roboto');
+    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 11 : 14).text(bName, leftX, textY);
+    textY = doc.y + 2;
+    
+    doc.font('Roboto').fontSize(isA5 ? 7 : 8).fillColor(textColor);
     if (bAddress) {
-      doc.text(bAddress, startX, currentY, { width: contentWidth / 2 });
-      currentY = doc.y + 2;
+      doc.text(bAddress, leftX, textY, { width: rightColX - leftX - 10 });
+      textY = doc.y + 2;
     }
-    if (bPhone) {
-      doc.text(`Phone: ${bPhone}`, startX, currentY);
-      currentY = doc.y + 2;
+    
+    const contactLines = [];
+    if (bPhone) contactLines.push(`Mobile : ${bPhone}`);
+    if (config.businessEmail || (bill.userId?.email && bill.userId?.email.includes('@'))) {
+      const bEmail = config.businessEmail || bill.userId.email;
+      contactLines.push(`Email : ${bEmail}`);
     }
-    if (bGstin) {
-      doc.text(`GSTIN: ${bGstin}`, startX, currentY);
-      currentY = doc.y + 2;
+    if (contactLines.length > 0) {
+      doc.text(contactLines.join('  |  '), leftX, textY);
+      textY = doc.y + 2;
     }
 
-    // Invoice Details (Right-aligned)
-    const invoiceId = bill._id.toString().toUpperCase();
-    doc.fillColor(textColor).fontSize(fsNormal).font('Roboto-Bold').text('INVOICE DETAIL', margin, headerY, { align: 'right', width: contentWidth });
-    let invY = doc.y + 3;
-    doc.font('Roboto').fillColor(secondaryText).fontSize(fsLabel);
-    doc.text(`Invoice ID: ${invoiceId}`, margin, invY, { align: 'right', width: contentWidth });
-    invY = doc.y + 2;
-    doc.text(`Date: ${new Date(bill.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}`, margin, invY, { align: 'right', width: contentWidth });
+    const taxLines = [];
+    if (bGstin) taxLines.push(`GSTIN : ${bGstin}`);
+    if (panNum) taxLines.push(`PAN Number : ${panNum}`);
+    if (taxLines.length > 0) {
+      doc.text(taxLines.join('  |  '), leftX, textY);
+    }
 
-    // Divider Line
-    const dividerY = Math.max(currentY, invY) + 15;
-    doc.strokeColor('#e5e7eb').lineWidth(1).moveTo(margin, dividerY).lineTo(pageWidth - margin, dividerY).stroke();
- 
-    // Billing Info Section
-    const billingInfoY = dividerY + 15;
-    doc.fillColor(textColor).fontSize(fsNormal).font('Roboto-Bold').text('BILL TO:', margin, billingInfoY);
-    currentY = doc.y + 3;
- 
-    doc.font('Roboto').fontSize(fsNormal).fillColor(textColor);
-    doc.text(`Customer Name: ${bill.customerName}`, margin, currentY);
-    currentY = doc.y + 3;
-    doc.text(`Contact Phone: ${bill.customerPhone || 'N/A'}`, margin, currentY);
-    currentY = doc.y + 3;
- 
+    // Render Invoice Info (Right Column)
+    let rightX = rightColX + 10;
+    let rightY = currentY + 10;
+
+    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 12 : 14).text('TAX INVOICE', rightX, rightY);
+    rightY = doc.y + 4;
+
+    // ORIGINAL FOR RECIPIENT tag
+    const badgeW = isA5 ? 100 : 130;
+    const badgeH = isA5 ? 12 : 14;
+    doc.rect(rightX, rightY, badgeW, badgeH).fillColor('#f3f4f6').fillAndStroke('#f3f4f6', '#cccccc');
+    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 6 : 7).text('ORIGINAL FOR RECIPIENT', rightX, rightY + (isA5 ? 2.5 : 3.5), { align: 'center', width: badgeW });
+    rightY += badgeH + 6;
+
+    // Invoice details table inside right header box
+    doc.font('Roboto').fontSize(isA5 ? 7 : 8.5).fillColor(textColor);
+    const detailsRow = (label, val) => {
+      doc.font('Roboto').text(label, rightX, rightY);
+      doc.font('Roboto-Bold').text(val, rightX + (isA5 ? 55 : 75), rightY, { width: rightColWidth - (isA5 ? 70 : 90), align: 'right' });
+      rightY = doc.y + 2.5;
+    };
+
+    const invoiceNo = `INV-${bill._id.toString().toUpperCase().slice(-6)}`;
+    detailsRow('Invoice No.', invoiceNo);
+    detailsRow('Invoice Date', new Date(bill.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' }));
+    
+    if (bill.paymentType === 'Credit' && bill.dueDate) {
+      detailsRow('Due Date', new Date(bill.dueDate).toLocaleDateString('en-IN', { dateStyle: 'medium' }));
+    }
+
+    currentY += headerBoxHeight;
+
+    // 2. BILL TO & SHIP TO Box
+    const clientBoxHeight = isA5 ? 45 : 60;
+    doc.rect(margin, currentY, contentWidth, clientBoxHeight).stroke();
+    
+    // Header divider line (horizontal)
+    const clientHeaderH = isA5 ? 13 : 16;
+    doc.rect(margin, currentY, contentWidth, clientHeaderH).fillColor('#f3f4f6').fillAndStroke('#f3f4f6', '#cccccc');
+    
+    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
+    doc.text('BILL TO', margin + 10, currentY + (isA5 ? 3 : 4));
+    doc.text('SHIP TO', (pageWidth / 2) + 5, currentY + (isA5 ? 3 : 4));
+
+    // Vertical splitter for client boxes
+    doc.moveTo(pageWidth / 2, currentY).lineTo(pageWidth / 2, currentY + clientBoxHeight).stroke();
+
+    // Client Details Content
+    let clientY = currentY + clientHeaderH + 4;
+    doc.fillColor(textColor).fontSize(isA5 ? 7.5 : 9.5);
+    
+    // BILL TO
+    doc.font('Roboto-Bold').text(bill.customerName, margin + 10, clientY);
+    if (bill.customerPhone && bill.customerPhone !== '+91') {
+      doc.font('Roboto').fontSize(isA5 ? 6.5 : 8).text(`Mob: ${bill.customerPhone}`, margin + 10, doc.y + 1);
+    }
     if (bill.customerAddress) {
-      doc.text(`Customer Address: ${bill.customerAddress}`, margin, currentY, { width: contentWidth / 2 });
-      currentY = doc.y + 3;
+      doc.font('Roboto').fontSize(isA5 ? 6.5 : 8).text(`Place of Supply: ${bill.customerAddress}`, margin + 10, doc.y + 1);
     }
 
-    // Items Table Section
-    const tableTop = currentY + 20;
+    // SHIP TO
+    doc.font('Roboto-Bold').fontSize(isA5 ? 7.5 : 9.5).text(bill.customerName, (pageWidth / 2) + 10, clientY);
+    if (bill.customerPhone && bill.customerPhone !== '+91') {
+      doc.font('Roboto').fontSize(isA5 ? 6.5 : 8).text(`Mob: ${bill.customerPhone}`, (pageWidth / 2) + 10, doc.y + 1);
+    }
+    if (bill.customerAddress) {
+      doc.font('Roboto').fontSize(isA5 ? 6.5 : 8).text(`Delivery Address: ${bill.customerAddress}`, (pageWidth / 2) + 10, doc.y + 1, { width: (contentWidth / 2) - 15 });
+    }
+
+    currentY += clientBoxHeight;
+
+    // 3. Items Table Header
+    const tableHeaderH = isA5 ? 16 : 20;
+    doc.rect(margin, currentY, contentWidth, tableHeaderH).fillColor('#f3f4f6').fillAndStroke('#f3f4f6', '#cccccc');
     
-    const col1 = margin; // Item (approx 35%)
-    const col2 = margin + contentWidth * 0.40; // Qty (15%)
-    const col3 = margin + contentWidth * 0.55; // Unit Price (15%)
-    const col4 = margin + contentWidth * 0.70; // GST (15%)
-    const col5 = margin + contentWidth * 0.85; // Amount (15%)
+    // Column coordinates definitions
+    const colX = {
+      sno: margin,
+      items: margin + (isA5 ? 25 : 30),
+      hsn: margin + contentWidth - (isA5 ? 200 : 255),
+      qty: margin + contentWidth - (isA5 ? 150 : 190),
+      rate: margin + contentWidth - (isA5 ? 110 : 140),
+      tax: margin + contentWidth - (isA5 ? 60 : 75),
+      amount: margin + contentWidth - (isA5 ? 35 : 45),
+    };
+
+    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
     
-    const w1 = contentWidth * 0.38;
-    const w2 = contentWidth * 0.13;
-    const w3 = contentWidth * 0.13;
-    const w4 = contentWidth * 0.13;
-    const w5 = contentWidth * 0.15;
+    doc.text('S.NO.', colX.sno + 5, currentY + (isA5 ? 4 : 5.5));
+    doc.text('ITEMS', colX.items + 5, currentY + (isA5 ? 4 : 5.5));
+    doc.text('HSN', colX.hsn, currentY + (isA5 ? 4 : 5.5), { width: colX.qty - colX.hsn, align: 'center' });
+    doc.text('QTY.', colX.qty, currentY + (isA5 ? 4 : 5.5), { width: colX.rate - colX.qty, align: 'center' });
+    doc.text('RATE', colX.rate, currentY + (isA5 ? 4 : 5.5), { width: colX.tax - colX.rate, align: 'center' });
+    doc.text('TAX', colX.tax, currentY + (isA5 ? 4 : 5.5), { width: colX.amount - colX.tax, align: 'center' });
+    doc.text('AMOUNT', colX.amount, currentY + (isA5 ? 4 : 5.5), { width: (pageWidth - margin) - colX.amount - 5, align: 'right' });
 
-    // Table Headers
-    doc.fillColor(primaryColor).font('Roboto-Bold').fontSize(fsNormal - 1);
-   
-    doc.text('Item Description', col1, tableTop);
-    doc.text('Qty', col2, tableTop, { width: w2, align: 'right' });
-    doc.text('Unit Price', col3, tableTop, { width: w3, align: 'right' });
-    doc.text('GST (%)', col4, tableTop, { width: w4, align: 'right' });
-    doc.text('Amount (₹)', col5, tableTop, { width: w5, align: 'right' });
-   
-    doc.strokeColor(primaryColor).lineWidth(1.5).moveTo(margin, tableTop + 15).lineTo(pageWidth - margin, tableTop + 15).stroke();
+    currentY += tableHeaderH;
+    const tableBodyStartY = currentY;
 
-    // Table Body Rows
-    let y = tableTop + 25;
-    doc.font('Roboto').fontSize(fsNormal - 1).fillColor(textColor);
+    // Render Table Rows
+    doc.font('Roboto').fontSize(isA5 ? 7 : 8.5).fillColor(textColor);
+    
+    let totalQty = 0;
+    let totalTaxVal = 0;
+    let totalTaxableVal = 0;
 
-    bill.items.forEach((item) => {
+    bill.items.forEach((item, index) => {
       const qty = Number(item.quantity);
-      const price = Number(item.price);
-      const gst = Number(item.gst);
+      const price = Number(item.price); // Exclusive base price
+      const gst = Number(item.gst || 0);
+      
       const baseVal = price * qty;
       const gstVal = (baseVal * gst) / 100;
       const totalItem = baseVal + gstVal;
 
-      doc.rect(margin, y - 4, contentWidth, 18).fill('#f9fafb');
-      doc.fillColor(textColor);
+      totalQty += qty;
+      totalTaxVal += gstVal;
+      totalTaxableVal += baseVal;
 
-      const unitSuffix = item.unit === 'kg' ? ' kg' : ' pcs';
-      const qtyText = `${qty}${unitSuffix}`;
+      const rowHeight = isA5 ? 18 : 24;
+      const itemTextY = currentY + (isA5 ? 4.5 : 6.5);
 
-      doc.text(item.productName, col1 + 5, y, { width: w1 - 5, lineBreak: false });
-      doc.text(qtyText, col2, y, { width: w2, align: 'right' });
-      doc.text(`₹${price.toFixed(2)}`, col3, y, { width: w3, align: 'right' });
-      doc.text(`${gst}%`, col4, y, { width: w4, align: 'right' });
-      doc.text(`₹${totalItem.toFixed(2)}`, col5, y, { width: w5, align: 'right' });
+      // Draw light zebra rows
+      if (index % 2 === 1) {
+        doc.rect(margin, currentY, contentWidth, rowHeight).fill('#f9fafb').strokeColor('#000000').lineWidth(0.5);
+        doc.fillColor(textColor);
+      }
 
-      y += 20;
+      // Draw Sno
+      doc.text(`${index + 1}`, colX.sno + 5, itemTextY);
+      
+      // Draw item name & optional barcode/desc
+      doc.text(item.productName, colX.items + 5, itemTextY, { width: colX.hsn - colX.items - 10, lineBreak: false });
+      
+      // Draw HSN
+      doc.text(item.hsn || '84733030', colX.hsn, itemTextY, { width: colX.qty - colX.hsn, align: 'center' });
+      
+      // Draw QTY
+      const unit = item.unit === 'kg' ? ' KG' : ' PCS';
+      doc.text(`${qty}${unit}`, colX.qty, itemTextY, { width: colX.rate - colX.qty, align: 'center' });
+      
+      // Draw RATE (base exclusive)
+      doc.text(`₹${price.toFixed(2)}`, colX.rate, itemTextY, { width: colX.tax - colX.rate, align: 'center' });
+      
+      // Draw TAX rate & amount
+      doc.text(`₹${gstVal.toFixed(2)}\n(${gst}%)`, colX.tax, itemTextY - (isA5 ? 1 : 2.5), { width: colX.amount - colX.tax, align: 'center' });
+      
+      // Draw AMOUNT
+      doc.text(`₹${totalItem.toFixed(2)}`, colX.amount, itemTextY, { width: (pageWidth - margin) - colX.amount - 5, align: 'right' });
+
+      currentY += rowHeight;
+      // Draw row separator line
+      doc.moveTo(margin, currentY).lineTo(pageWidth - margin, currentY).stroke();
     });
 
-    doc.strokeColor('#cccccc').lineWidth(1).moveTo(margin, y).lineTo(pageWidth - margin, y).stroke();
+    const tableBottomY = currentY;
 
-    // Totals Block
-    let totalsTop = y + 15;
+    // Draw vertical column separators inside table
+    const columnsToDraw = [colX.items, colX.hsn, colX.qty, colX.rate, colX.tax, colX.amount];
+    columnsToDraw.forEach(x => {
+      doc.moveTo(x, tableBodyStartY).lineTo(x, tableBottomY).stroke();
+    });
+
+    // 4. SUBTOTAL ROW
+    const subtotalH = isA5 ? 16 : 20;
+    doc.rect(margin, tableBottomY, contentWidth, subtotalH).fillColor('#f3f4f6').fillAndStroke('#f3f4f6', '#cccccc');
+    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
+
+    doc.text('SUBTOTAL', colX.items + 5, tableBottomY + (isA5 ? 4 : 5.5));
+    doc.text(`${totalQty} PCS`, colX.qty, tableBottomY + (isA5 ? 4 : 5.5), { width: colX.rate - colX.qty, align: 'center' });
+    doc.text(`₹${totalTaxVal.toFixed(2)}`, colX.tax, tableBottomY + (isA5 ? 4 : 5.5), { width: colX.amount - colX.tax, align: 'center' });
+    doc.text(`₹${Number(bill.total).toFixed(2)}`, colX.amount, tableBottomY + (isA5 ? 4 : 5.5), { width: (pageWidth - margin) - colX.amount - 5, align: 'right' });
+
+    currentY = tableBottomY + subtotalH;
+
+    // Draw vertical columns through subtotal too
+    columnsToDraw.forEach(x => {
+      doc.moveTo(x, tableBottomY).lineTo(x, currentY).stroke();
+    });
+
+    // 5. SPLIT FOOTER (Bank Details + QR on Left | Tax Calculations & Totals on Right)
+    const footerH = isA5 ? 115 : 155;
+    doc.rect(margin, currentY, contentWidth, footerH).stroke();
+
+    // Draw vertical divider down center
+    const splitX = pageWidth / 2;
+    doc.moveTo(splitX, currentY).lineTo(splitX, currentY + footerH).stroke();
+
+    // LEFT COLUMN (Bank Details & QR Payment)
+    let leftFooterY = currentY + 8;
+    const leftFooterPaddingX = margin + 10;
     
-    if (config.qrCodeBuffer) {
-      try {
-        const qrSize = isA5 ? 60 : 80;
-        doc.image(config.qrCodeBuffer, margin, totalsTop, { fit: [qrSize, qrSize] });
-        doc.fillColor(textColor).font('Roboto-Bold').fontSize(fsLabel).text('Scan to Pay via UPI', margin, totalsTop + qrSize + 5);
-        if (config.upiId) {
-          doc.fillColor(secondaryText).font('Roboto').fontSize(fsLabel - 1).text(config.upiId, margin, totalsTop + qrSize + 15, { width: 150 });
+    // Render Bank Details if defined
+    const bankDetailsName = config.bankAccountName || config.businessName || bName;
+    const bankIFSC = config.bankIfsc || '';
+    const bankAcc = config.bankAccountNo || '';
+    const bankTitle = config.bankName || '';
+
+    if (bankAcc || bankIFSC) {
+      doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8.5).text('BANK DETAILS', leftFooterPaddingX, leftFooterY);
+      leftFooterY = doc.y + 3;
+      
+      doc.font('Roboto').fontSize(isA5 ? 6 : 7.5);
+      const rowItem = (label, val) => {
+        doc.font('Roboto-Bold').text(label, leftFooterPaddingX, leftFooterY, { width: 50, lineBreak: false });
+        doc.font('Roboto').text(val, leftFooterPaddingX + (isA5 ? 40 : 50), leftFooterY);
+        leftFooterY = doc.y + 1.5;
+      };
+
+      rowItem('Name:', bankDetailsName);
+      if (bankIFSC) rowItem('IFSC Code:', bankIFSC);
+      if (bankAcc) rowItem('Account No:', bankAcc);
+      if (bankTitle) rowItem('Bank:', bankTitle);
+    }
+
+    // Render Payment QR Code
+    let qrTopY = currentY + (isA5 ? 50 : 70);
+    if (config.upiId) {
+      doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8.5).text('PAYMENT QR CODE', leftFooterPaddingX, qrTopY);
+      doc.font('Roboto').fontSize(isA5 ? 6 : 7).text(`UPI ID: ${config.upiId}`, leftFooterPaddingX, doc.y + 2);
+      
+      // Draw mini visual check of UPI apps text
+      doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(isA5 ? 5.5 : 6.5).text('PhonePe | GPay | Paytm | UPI', leftFooterPaddingX, doc.y + 3);
+
+      if (config.qrCodeBuffer) {
+        try {
+          const qrSize = isA5 ? 50 : 72;
+          doc.image(config.qrCodeBuffer, splitX - qrSize - 10, qrTopY, { fit: [qrSize, qrSize] });
+        } catch (qrErr) {
+          console.error('Failed to draw QR buffer on PDF invoice:', qrErr);
         }
-      } catch (qrDrawError) {
-        console.error('Error drawing QR Code on PDF:', qrDrawError);
       }
     }
+
+    // RIGHT COLUMN (GST calculation, received totals and words representation)
+    let rightFooterY = currentY + 8;
+    const rightFooterPaddingX = splitX + 10;
+    const valColWidth = (pageWidth - margin) - rightFooterPaddingX;
+
+    doc.font('Roboto').fontSize(isA5 ? 7 : 8.5).fillColor(textColor);
     
-    if (bill.paymentType === 'Credit') {
-      doc.fillColor(textColor).font('Roboto-Bold').fontSize(fsNormal).text(`Total Bill Amount: ₹${Number(bill.total).toFixed(2)}`, margin, totalsTop, { align: 'right', width: contentWidth });
-      totalsTop += 15;
-      
-      doc.fillColor('#10b981').font('Roboto-Bold').fontSize(fsNormal).text(`Amount Paid: ₹${Number(bill.paidAmount || 0).toFixed(2)}`, margin, totalsTop, { align: 'right', width: contentWidth });
-      totalsTop += 15;
-      
-      doc.fillColor('#d97706').font('Roboto-Bold').fontSize(fsLarge).text(`Remaining Balance (Udhaar): ₹${Number(bill.remainingAmount || 0).toFixed(2)}`, margin, totalsTop, { align: 'right', width: contentWidth });
+    const totalsRow = (label, val, isBold = false) => {
+      doc.font(isBold ? 'Roboto-Bold' : 'Roboto').text(label, rightFooterPaddingX, rightFooterY);
+      doc.font(isBold ? 'Roboto-Bold' : 'Roboto').text(`₹${val}`, rightFooterPaddingX, rightFooterY, { width: valColWidth - 5, align: 'right' });
+      rightFooterY = doc.y + (isA5 ? 2 : 3);
+    };
 
-      if (bill.dueDate) {
-        totalsTop += 18;
-        doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(fsNormal - 1).text(`Payment Due Date: ${new Date(bill.dueDate).toLocaleDateString()}`, margin, totalsTop, { align: 'right', width: contentWidth });
-      }
-    } else {
-      doc.fillColor(primaryColor).font('Roboto-Bold').fontSize(fsLarge).text(`Grand Total (Paid): ₹${Number(bill.total).toFixed(2)}`, margin, totalsTop, { align: 'right', width: contentWidth });
-    }
+    // Calculate split tax variables
+    const taxableAmt = totalTaxableVal;
+    const cgstVal = totalTaxVal / 2;
+    const sgstVal = totalTaxVal / 2;
 
-    let footerY = totalsTop + 60;
-    if (bill.paymentType === 'Credit') footerY = totalsTop + (bill.dueDate ? 80 : 65);
-    if (config.qrCodeBuffer) footerY = Math.max(footerY, totalsTop + 115);
+    totalsRow('Taxable Amount', taxableAmt.toFixed(2));
+    totalsRow('CGST', cgstVal.toFixed(2));
+    totalsRow('SGST', sgstVal.toFixed(2));
+    totalsRow('Total Amount', Number(bill.total).toFixed(2), true);
+    totalsRow('Received Amount', Number(bill.paidAmount || 0).toFixed(2));
+    
+    // Remaining Balance
+    const remainingAmt = bill.remainingAmount || 0;
+    totalsRow('Current Balance', remainingAmt.toFixed(2), remainingAmt > 0.01);
 
-    doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(fsNormal - 1).text(bFooter, margin, footerY, { align: 'center', width: contentWidth });
+    // Total Amount In Words
+    rightFooterY += 3;
+    doc.strokeColor('#cccccc').lineWidth(0.25).moveTo(splitX, rightFooterY).lineTo(pageWidth - margin, rightFooterY).stroke();
+    rightFooterY += 4;
+
+    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 6.5 : 7.5).text('Total Amount (in words)', rightFooterPaddingX, rightFooterY);
+    rightFooterY = doc.y + 1;
+    
+    const wordsText = numberToIndianWords(bill.total);
+    doc.font('Roboto-Italic').fontSize(isA5 ? 6 : 7).fillColor(secondaryText).text(wordsText, rightFooterPaddingX, rightFooterY, { width: valColWidth - 5 });
+
+    currentY += footerH;
+
+    // 6. BOTTOM AUTHORISED SIGNATURE
+    const bottomSpace = isA5 ? 40 : 55;
+    currentY += bottomSpace;
+
+    doc.fillColor(textColor).font('Roboto').fontSize(isA5 ? 7.5 : 9);
+    doc.text(`Authorised Signature for ${bName}`, pageWidth - margin - 220, currentY, { width: 220, align: 'right' });
+
+    // 7. GLOBAL INNER BORDER BOX
+    doc.strokeColor('#000000').lineWidth(0.75).rect(margin, margin, contentWidth, doc.page.height - (margin * 2)).stroke();
   }
 
   doc.end();

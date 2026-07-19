@@ -241,7 +241,12 @@ const getBillPdf = async (req, res) => {
       secondaryColor: bill.userId?.secondaryColor || '',
       upiId: bill.userId?.upiId || '',
       upiName: bill.userId?.upiName || '',
-      paperSize: req.query.size || 'A4'
+      paperSize: req.query.size || 'A4',
+      bankName: bill.userId?.bankName || '',
+      bankAccountNo: bill.userId?.bankAccountNo || '',
+      bankIfsc: bill.userId?.bankIfsc || '',
+      bankAccountName: bill.userId?.bankAccountName || '',
+      panNumber: bill.userId?.panNumber || ''
     };
 
     if (bill.userId?.enableInvoiceQr && bill.userId?.upiId) {
