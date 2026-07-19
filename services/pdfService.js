@@ -567,23 +567,33 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
           const rowY = qrTopY + qrSize + 4;
           const startLogoX = qrCenterX - 37.5; // Width of row is approx 75px
 
-          // 1. PhonePe Logo
-          doc.roundedRect(startLogoX, rowY, 11, 11, 2).fill('#5f259f');
-          doc.fillColor('#ffffff').font('Roboto-Bold').fontSize(5.5).text('Pe', startLogoX + 1.5, rowY + 2.5);
+          // 1. PhonePe Logo (Real Image with Vector Fallback)
+          try {
+            const phonepePath = path.join(__dirname, '..', 'assets', 'images', 'phonepe.png');
+            doc.image(phonepePath, startLogoX, rowY, { height: 11 });
+          } catch (e) {
+            doc.roundedRect(startLogoX, rowY, 11, 11, 2).fill('#5f259f');
+            doc.fillColor('#ffffff').font('Roboto-Bold').fontSize(5.5).text('Pe', startLogoX + 1.5, rowY + 2.5);
+          }
 
-          // 2. GPay Logo
-          doc.roundedRect(startLogoX + 15, rowY, 20, 11, 2).fillColor('#ffffff').strokeColor('#d1d5db').lineWidth(0.5).stroke();
-          doc.fillColor('#4285f4').font('Roboto-Bold').fontSize(5.5).text('G', startLogoX + 17, rowY + 2.5);
-          doc.fillColor('#5e6368').font('Roboto-Bold').fontSize(5.5).text('Pay', startLogoX + 22, rowY + 2.5);
+          // 2. GPay Logo (Real Image with Vector Fallback)
+          try {
+            const gpayPath = path.join(__dirname, '..', 'assets', 'images', 'gpay.png');
+            doc.image(gpayPath, startLogoX + 20, rowY - 1.5, { height: 14 });
+          } catch (e) {
+            doc.roundedRect(startLogoX + 20, rowY, 20, 11, 2).fillColor('#ffffff').strokeColor('#d1d5db').lineWidth(0.5).stroke();
+            doc.fillColor('#4285f4').font('Roboto-Bold').fontSize(5.5).text('G', startLogoX + 22, rowY + 2.5);
+            doc.fillColor('#5e6368').font('Roboto-Bold').fontSize(5.5).text('Pay', startLogoX + 27, rowY + 2.5);
+          }
 
-          // 3. Paytm Logo
-          doc.fillColor('#002e6e').font('Roboto-Bold').fontSize(5.5).text('pay', startLogoX + 39, rowY + 2.5);
-          doc.fillColor('#00baf2').font('Roboto-Bold').fontSize(5.5).text('tm', startLogoX + 48, rowY + 2.5);
+          // 3. Paytm Logo (shifted right)
+          doc.fillColor('#002e6e').font('Roboto-Bold').fontSize(5.5).text('pay', startLogoX + 41, rowY + 2.5);
+          doc.fillColor('#00baf2').font('Roboto-Bold').fontSize(5.5).text('tm', startLogoX + 50, rowY + 2.5);
 
-          // 4. UPI Logo
-          doc.fillColor('#0f3f7a').font('Roboto-Bold').fontSize(6).text('UPI', startLogoX + 59, rowY + 2);
-          doc.lineWidth(1).strokeColor('#0f3f7a').moveTo(startLogoX + 71, rowY + 8).lineTo(startLogoX + 73, rowY + 4).stroke();
-          doc.lineWidth(1).strokeColor('#2e8b57').moveTo(startLogoX + 73, rowY + 8).lineTo(startLogoX + 75, rowY + 4).stroke();
+          // 4. UPI Logo (shifted right)
+          doc.fillColor('#0f3f7a').font('Roboto-Bold').fontSize(6).text('UPI', startLogoX + 61, rowY + 2);
+          doc.lineWidth(1).strokeColor('#0f3f7a').moveTo(startLogoX + 73, rowY + 8).lineTo(startLogoX + 75, rowY + 4).stroke();
+          doc.lineWidth(1).strokeColor('#2e8b57').moveTo(startLogoX + 75, rowY + 8).lineTo(startLogoX + 77, rowY + 4).stroke();
 
         } catch (qrErr) {
           console.error('Failed to draw QR buffer on PDF invoice:', qrErr);
