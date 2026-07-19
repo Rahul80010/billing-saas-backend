@@ -56,6 +56,34 @@ const numberToIndianWords = (num) => {
 };
 
 /**
+ * Draws a premium, high-quality vector folding hands (namaste) icon on the PDF doc.
+ */
+const drawNamaste = (doc, x, y, size = 10) => {
+  doc.save();
+  doc.translate(x, y);
+  doc.scale(size / 100);
+  doc.lineWidth(4);
+  doc.strokeColor('#b45309').fillColor('#fef3c7'); // Gold outline with warm light fill
+  
+  // Draw Joined Hands Path
+  doc.moveTo(50, 10)
+     .quadraticCurveTo(35, 30, 38, 70)
+     .quadraticCurveTo(42, 85, 48, 90)
+     .lineTo(52, 90)
+     .quadraticCurveTo(58, 85, 62, 70)
+     .quadraticCurveTo(65, 30, 50, 10)
+     .closePath()
+     .fillAndStroke();
+     
+  // Center divide line
+  doc.moveTo(50, 10)
+     .lineTo(50, 70)
+     .stroke();
+     
+  doc.restore();
+};
+
+/**
  * Generates an elegant print-friendly PDF invoice from a bill and pipes it to the HTTP response stream.
  * @param {object} bill - Mongoose Bill document
  * @param {object|string} businessConfig - Merchant's business settings or businessName string
@@ -607,6 +635,13 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     if (bFooter) {
       doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(isA5 ? 6.5 : 8);
       doc.text(bFooter, margin + 10, currentY, { width: contentWidth - 245, align: 'left' });
+      
+      const originalFooter = config.invoiceFooter || 'Thank you for your purchase! Please visit us again. 🙏';
+      if (originalFooter.includes('🙏') || originalFooter.includes('\uD83D\uDE4F')) {
+        const textW = doc.widthOfString(bFooter);
+        const iconSize = isA5 ? 8 : 10;
+        drawNamaste(doc, margin + 10 + textW + 3, currentY + (isA5 ? 0 : 0.5), iconSize);
+      }
     }
 
     doc.fillColor(textColor).font('Roboto').fontSize(isA5 ? 7.5 : 9);
