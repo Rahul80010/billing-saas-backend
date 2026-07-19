@@ -635,13 +635,6 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     if (bFooter) {
       doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(isA5 ? 6.5 : 8);
       doc.text(bFooter, margin + 10, currentY, { width: contentWidth - 245, align: 'left' });
-      
-      const originalFooter = config.invoiceFooter || 'Thank you for your purchase! Please visit us again. 🙏';
-      if (originalFooter.includes('🙏') || originalFooter.includes('\uD83D\uDE4F')) {
-        const textW = doc.widthOfString(bFooter);
-        const iconSize = isA5 ? 8 : 10;
-        drawNamaste(doc, margin + 10 + textW + 3, currentY + (isA5 ? 0 : 0.5), iconSize);
-      }
     }
 
     doc.fillColor(textColor).font('Roboto').fontSize(isA5 ? 7.5 : 9);
