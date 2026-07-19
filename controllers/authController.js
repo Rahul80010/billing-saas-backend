@@ -289,6 +289,7 @@ const updateProfile = async (req, res) => {
     whatsappPhoneNumberId,
     businessAddress,
     businessPhone,
+    businessEmail,
     gstin,
     invoiceFooter,
     logo,
@@ -323,6 +324,7 @@ const updateProfile = async (req, res) => {
       user.whatsappPhoneNumberId = whatsappPhoneNumberId !== undefined ? whatsappPhoneNumberId : user.whatsappPhoneNumberId;
       user.businessAddress = businessAddress !== undefined ? businessAddress : user.businessAddress;
       user.businessPhone = businessPhone !== undefined ? businessPhone : user.businessPhone;
+      user.businessEmail = businessEmail !== undefined ? businessEmail : user.businessEmail;
       user.gstin = gstin !== undefined ? gstin : user.gstin;
       user.invoiceFooter = invoiceFooter !== undefined ? invoiceFooter : user.invoiceFooter;
       user.logo = logo !== undefined ? logo : user.logo;
@@ -360,6 +362,7 @@ const updateProfile = async (req, res) => {
         whatsappPhoneNumberId: updatedUser.whatsappPhoneNumberId,
         businessAddress: updatedUser.businessAddress,
         businessPhone: updatedUser.businessPhone,
+        businessEmail: updatedUser.businessEmail,
         gstin: updatedUser.gstin,
         invoiceFooter: updatedUser.invoiceFooter,
         logo: updatedUser.logo,

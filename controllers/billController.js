@@ -234,6 +234,7 @@ const getBillPdf = async (req, res) => {
       businessName: bill.userId?.businessName || bill.userId?.name || 'MOHURI Invoice',
       businessAddress: bill.userId?.businessAddress || '',
       businessPhone: bill.userId?.businessPhone || '',
+      businessEmail: bill.userId?.businessEmail || '',
       gstin: bill.userId?.gstin || '',
       invoiceFooter: bill.userId?.invoiceFooter || '',
       logo: bill.userId?.logo || '',

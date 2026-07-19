@@ -264,9 +264,8 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     
     const contactLines = [];
     if (bPhone) contactLines.push(`Mobile : ${bPhone}`);
-    if (config.businessEmail || (bill.userId?.email && bill.userId?.email.includes('@'))) {
-      const bEmail = config.businessEmail || bill.userId.email;
-      contactLines.push(`Email : ${bEmail}`);
+    if (config.businessEmail) {
+      contactLines.push(`Email : ${config.businessEmail}`);
     }
     if (contactLines.length > 0) {
       doc.text(contactLines.join('  |  '), leftX, textY);

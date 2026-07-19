@@ -60,6 +60,11 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  businessEmail: {
+    type: String,
+    trim: true,
+    default: '',
+  },
   gstin: {
     type: String,
     trim: true,
