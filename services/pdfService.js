@@ -501,13 +501,34 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8.5).text('PAYMENT QR CODE', leftFooterPaddingX, qrTopY);
       doc.font('Roboto').fontSize(isA5 ? 6 : 7).text(`UPI ID: ${config.upiId}`, leftFooterPaddingX, doc.y + 2);
       
-      // Draw mini visual check of UPI apps text
-      doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(isA5 ? 5.5 : 6.5).text('PhonePe | GPay | Paytm | UPI', leftFooterPaddingX, doc.y + 3);
-
       if (config.qrCodeBuffer) {
         try {
           const qrSize = isA5 ? 50 : 72;
           doc.image(config.qrCodeBuffer, splitX - qrSize - 10, qrTopY, { fit: [qrSize, qrSize] });
+          
+          // Render UPI Apps Logo Row under the QR Code
+          const qrCenterX = splitX - 10 - (qrSize / 2);
+          const rowY = qrTopY + qrSize + 4;
+          const startLogoX = qrCenterX - 36; // Width of row is approx 72px
+
+          // 1. PhonePe Logo
+          doc.roundedRect(startLogoX, rowY, 11, 11, 2).fill('#5f259f');
+          doc.fillColor('#ffffff').font('Roboto-Bold').fontSize(5.5).text('Pe', startLogoX + 1.5, rowY + 2.5);
+
+          // 2. GPay Logo
+          doc.roundedRect(startLogoX + 15, rowY, 20, 11, 2).fillColor('#ffffff').strokeColor('#d1d5db').lineWidth(0.5).stroke();
+          doc.fillColor('#4285f4').font('Roboto-Bold').fontSize(5.5).text('G', startLogoX + 17, rowY + 2.5);
+          doc.fillColor('#5e6368').font('Roboto-Bold').fontSize(5.5).text('Pay', startLogoX + 22, rowY + 2.5);
+
+          // 3. Paytm Logo
+          doc.fillColor('#002e6e').font('Roboto-Bold').fontSize(5.5).text('pay', startLogoX + 39, rowY + 2.5);
+          doc.fillColor('#00baf2').font('Roboto-Bold').fontSize(5.5).text('tm', startLogoX + 48, rowY + 2.5);
+
+          // 4. UPI Logo
+          doc.fillColor('#0f3f7a').font('Roboto-Bold').fontSize(6).text('UPI', startLogoX + 59, rowY + 2);
+          doc.lineWidth(1).strokeColor('#0f3f7a').moveTo(startLogoX + 71, rowY + 8).lineTo(startLogoX + 73, rowY + 4).stroke();
+          doc.lineWidth(1).strokeColor('#2e8b57').moveTo(startLogoX + 73, rowY + 8).lineTo(startLogoX + 75, rowY + 4).stroke();
+
         } catch (qrErr) {
           console.error('Failed to draw QR buffer on PDF invoice:', qrErr);
         }
