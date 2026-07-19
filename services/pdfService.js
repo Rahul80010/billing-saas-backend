@@ -535,7 +535,6 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
           doc.strokeColor('#2e8b57').moveTo(qrCenterX + (isA5 ? 3 : 4.5), qrCenterY + (isA5 ? 2 : 2.5)).lineTo(qrCenterX + (isA5 ? 4 : 6), qrCenterY - (isA5 ? 2 : 2.5)).stroke();
           
           // Render UPI Apps Logo Row under the QR Code
-          const qrCenterX = splitX - 12 - (qrSize / 2);
           const rowY = qrTopY + qrSize + 4;
           const startLogoX = qrCenterX - 37.5; // Width of row is approx 75px
 
