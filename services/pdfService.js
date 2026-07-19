@@ -62,22 +62,22 @@ const drawNamaste = (doc, x, y, size = 10) => {
   doc.save();
   doc.translate(x, y);
   doc.scale(size / 100);
-  doc.lineWidth(4);
+  doc.lineWidth(5);
   doc.strokeColor('#b45309').fillColor('#fef3c7'); // Gold outline with warm light fill
   
-  // Draw Joined Hands Path
+  // Draw Joined Hands Path (Wider for natural proportion)
   doc.moveTo(50, 10)
-     .quadraticCurveTo(35, 30, 38, 70)
-     .quadraticCurveTo(42, 85, 48, 90)
-     .lineTo(52, 90)
-     .quadraticCurveTo(58, 85, 62, 70)
-     .quadraticCurveTo(65, 30, 50, 10)
+     .quadraticCurveTo(20, 35, 25, 68)
+     .quadraticCurveTo(32, 85, 47, 90)
+     .lineTo(53, 90)
+     .quadraticCurveTo(68, 85, 75, 68)
+     .quadraticCurveTo(80, 35, 50, 10)
      .closePath()
      .fillAndStroke();
      
-  // Center divide line
+  // Center divide line between the two hands
   doc.moveTo(50, 10)
-     .lineTo(50, 70)
+     .lineTo(50, 75)
      .stroke();
      
   doc.restore();
@@ -645,7 +645,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     }
 
     doc.fillColor(textColor).font('Roboto').fontSize(isA5 ? 7.5 : 9);
-    doc.text(`Authorised Signature for ${bName}`, pageWidth - margin - 220, currentY + 10, { width: 220, align: 'right' });
+    doc.text(`Authorised Signature for ${bName}`, pageWidth - margin - 230, currentY + 10, { width: 220, align: 'right' });
 
     // 7. GLOBAL INNER BORDER BOX
     doc.strokeColor('#000000').lineWidth(0.75).rect(margin, margin, contentWidth, doc.page.height - (margin * 2)).stroke();
