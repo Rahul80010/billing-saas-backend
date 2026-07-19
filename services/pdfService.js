@@ -298,7 +298,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     doc.font('Roboto').fontSize(isA5 ? 7 : 8.5).fillColor(textColor);
     const detailsRow = (label, val) => {
       doc.font('Roboto').text(label, rightX, rightY);
-      doc.font('Roboto-Bold').text(val, rightX + (isA5 ? 55 : 75), rightY, { width: rightColWidth - (isA5 ? 70 : 90), align: 'right' });
+      doc.font('Roboto-Bold').text(val, rightX + (isA5 ? 55 : 75), rightY, { width: rightColWidth - (isA5 ? 70 : 95), align: 'right' });
       rightY = doc.y + 2.5;
     };
 
@@ -353,7 +353,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
 
     // 3. Items Table Header
     const tableHeaderH = isA5 ? 16 : 20;
-    doc.rect(margin, currentY, contentWidth, tableHeaderH).fillColor('#f3f4f6').fillAndStroke('#f3f4f6', '#cccccc');
+    doc.rect(margin, currentY, contentWidth, tableHeaderH).fillColor('#f3f4f6');
     
     // Column coordinates definitions
     const colX = {
@@ -404,7 +404,7 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
 
       // Draw light zebra rows
       if (index % 2 === 1) {
-        doc.rect(margin, currentY, contentWidth, rowHeight).fill('#f9fafb').strokeColor('#000000').lineWidth(0.5);
+        doc.rect(margin, currentY, contentWidth, rowHeight).fill('#f9fafb');
         doc.fillColor(textColor);
       }
 
@@ -431,21 +431,13 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       doc.text(`₹${totalItem.toFixed(2)}`, colX.amount, itemTextY, { width: (pageWidth - margin) - colX.amount - 5, align: 'right' });
 
       currentY += rowHeight;
-      // Draw row separator line
-      doc.moveTo(margin, currentY).lineTo(pageWidth - margin, currentY).stroke();
     });
 
     const tableBottomY = currentY;
 
-    // Draw vertical column separators inside table
-    const columnsToDraw = [colX.items, colX.hsn, colX.qty, colX.rate, colX.tax, colX.amount];
-    columnsToDraw.forEach(x => {
-      doc.moveTo(x, tableBodyStartY).lineTo(x, tableBottomY).stroke();
-    });
-
     // 4. SUBTOTAL ROW
     const subtotalH = isA5 ? 16 : 20;
-    doc.rect(margin, tableBottomY, contentWidth, subtotalH).fillColor('#f3f4f6').fillAndStroke('#f3f4f6', '#cccccc');
+    doc.rect(margin, tableBottomY, contentWidth, subtotalH).fillColor('#f3f4f6');
     doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
 
     doc.text('SUBTOTAL', colX.items + 5, tableBottomY + (isA5 ? 4 : 5.5));
@@ -455,9 +447,29 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
 
     currentY = tableBottomY + subtotalH;
 
-    // Draw vertical columns through subtotal too
+    // --- DRAW CRITICAL GRID LINES FOR THE TABLE GRID ---
+    // This draws one outer clean rectangle around the whole table (header + body + subtotal)
+    doc.strokeColor('#000000').lineWidth(0.5);
+    doc.rect(margin, tableBodyStartY - tableHeaderH, contentWidth, currentY - (tableBodyStartY - tableHeaderH)).stroke();
+
+    // Draw horizontal dividers
+    doc.moveTo(margin, tableBodyStartY).lineTo(pageWidth - margin, tableBodyStartY).stroke(); // Header/Body line
+    doc.moveTo(margin, tableBottomY).lineTo(pageWidth - margin, tableBottomY).stroke(); // Body/Subtotal line
+    
+    // Draw intermediate row lines
+    let tempY = tableBodyStartY;
+    bill.items.forEach(() => {
+      const rowHeight = isA5 ? 18 : 24;
+      tempY += rowHeight;
+      if (tempY < tableBottomY) {
+        doc.moveTo(margin, tempY).lineTo(pageWidth - margin, tempY).stroke();
+      }
+    });
+
+    // Draw vertical column splitters cutting through header, body, and subtotal
+    const columnsToDraw = [colX.items, colX.hsn, colX.qty, colX.rate, colX.tax, colX.amount];
     columnsToDraw.forEach(x => {
-      doc.moveTo(x, tableBottomY).lineTo(x, currentY).stroke();
+      doc.moveTo(x, tableBodyStartY - tableHeaderH).lineTo(x, currentY).stroke();
     });
 
     // 5. SPLIT FOOTER (Bank Details + QR on Left | Tax Calculations & Totals on Right)
@@ -495,21 +507,21 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       if (bankTitle) rowItem('Bank:', bankTitle);
     }
 
-    // Render Payment QR Code
-    let qrTopY = currentY + (isA5 ? 50 : 70);
+    // Render Payment QR Code (shifted higher to prevent overlapping logo rows)
+    let qrTopY = currentY + (isA5 ? 40 : 12);
     if (config.upiId) {
       doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8.5).text('PAYMENT QR CODE', leftFooterPaddingX, qrTopY);
       doc.font('Roboto').fontSize(isA5 ? 6 : 7).text(`UPI ID: ${config.upiId}`, leftFooterPaddingX, doc.y + 2);
-      
+
       if (config.qrCodeBuffer) {
         try {
           const qrSize = isA5 ? 50 : 72;
-          doc.image(config.qrCodeBuffer, splitX - qrSize - 10, qrTopY, { fit: [qrSize, qrSize] });
+          doc.image(config.qrCodeBuffer, splitX - qrSize - 12, qrTopY, { fit: [qrSize, qrSize] });
           
           // Render UPI Apps Logo Row under the QR Code
-          const qrCenterX = splitX - 10 - (qrSize / 2);
+          const qrCenterX = splitX - 12 - (qrSize / 2);
           const rowY = qrTopY + qrSize + 4;
-          const startLogoX = qrCenterX - 36; // Width of row is approx 72px
+          const startLogoX = qrCenterX - 37.5; // Width of row is approx 75px
 
           // 1. PhonePe Logo
           doc.roundedRect(startLogoX, rowY, 11, 11, 2).fill('#5f259f');
@@ -535,17 +547,16 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       }
     }
 
-    // RIGHT COLUMN (GST calculation, received totals and words representation)
-    let rightFooterY = currentY + 8;
+    // RIGHT COLUMN (GST calculation, received totals and words representation with perfect vertical steps)
+    let rightFooterY = currentY + 12;
     const rightFooterPaddingX = splitX + 10;
     const valColWidth = (pageWidth - margin) - rightFooterPaddingX;
 
-    doc.font('Roboto').fontSize(isA5 ? 7 : 8.5).fillColor(textColor);
-    
     const totalsRow = (label, val, isBold = false) => {
-      doc.font(isBold ? 'Roboto-Bold' : 'Roboto').text(label, rightFooterPaddingX, rightFooterY);
-      doc.font(isBold ? 'Roboto-Bold' : 'Roboto').text(`₹${val}`, rightFooterPaddingX, rightFooterY, { width: valColWidth - 5, align: 'right' });
-      rightFooterY = doc.y + (isA5 ? 2 : 3);
+      doc.fillColor(textColor).font(isBold ? 'Roboto-Bold' : 'Roboto').fontSize(isA5 ? 7 : 8.5);
+      doc.text(label, rightFooterPaddingX, rightFooterY);
+      doc.text(`₹${val}`, rightFooterPaddingX, rightFooterY, { width: valColWidth - 10, align: 'right' });
+      rightFooterY += isA5 ? 12 : 16;
     };
 
     // Calculate split tax variables
@@ -564,15 +575,12 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     totalsRow('Current Balance', remainingAmt.toFixed(2), remainingAmt > 0.01);
 
     // Total Amount In Words
-    rightFooterY += 3;
-    doc.strokeColor('#cccccc').lineWidth(0.25).moveTo(splitX, rightFooterY).lineTo(pageWidth - margin, rightFooterY).stroke();
-    rightFooterY += 4;
+    doc.strokeColor('#cccccc').lineWidth(0.25).moveTo(splitX, currentY + (isA5 ? 88 : 114)).lineTo(pageWidth - margin, currentY + (isA5 ? 88 : 114)).stroke();
 
-    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 6.5 : 7.5).text('Total Amount (in words)', rightFooterPaddingX, rightFooterY);
-    rightFooterY = doc.y + 1;
+    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 6.5 : 7.5).text('Total Amount (in words)', rightFooterPaddingX, currentY + (isA5 ? 92 : 118));
     
     const wordsText = numberToIndianWords(bill.total);
-    doc.font('Roboto-Italic').fontSize(isA5 ? 6 : 7).fillColor(secondaryText).text(wordsText, rightFooterPaddingX, rightFooterY, { width: valColWidth - 5 });
+    doc.font('Roboto-Italic').fontSize(isA5 ? 6 : 7).fillColor(secondaryText).text(wordsText, rightFooterPaddingX, currentY + (isA5 ? 100 : 128), { width: valColWidth - 10 });
 
     currentY += footerH;
 
