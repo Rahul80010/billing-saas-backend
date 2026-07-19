@@ -271,11 +271,13 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       textY = doc.y + 2;
     }
 
-    const taxLines = [];
-    if (bGstin) taxLines.push(`GSTIN : ${bGstin}`);
-    if (panNum) taxLines.push(`PAN Number : ${panNum}`);
-    if (taxLines.length > 0) {
-      doc.text(taxLines.join('  |  '), leftX, textY);
+    if (bGstin) {
+      doc.text(`GSTIN : ${bGstin}`, leftX, textY);
+      textY = doc.y + 2;
+    }
+    if (panNum) {
+      doc.text(`PAN Number : ${panNum}`, leftX, textY);
+      textY = doc.y + 2;
     }
 
     // Render Invoice Info (Right Column)
