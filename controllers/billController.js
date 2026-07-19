@@ -92,28 +92,43 @@ const createBill = async (req, res) => {
     let finalStatus = 'paid';
     let finalDueDate = null;
 
-    if (paymentType === 'Credit') {
-      finalPaidAmount = Math.max(0, Number(paidAmount || 0));
-      // Ensure we don't pay more than the total
-      finalPaidAmount = Math.min(finalPaidAmount, finalTotal);
-      finalRemainingAmount = Number((finalTotal - finalPaidAmount).toFixed(2));
-      
-      if (finalRemainingAmount <= 0) {
-        finalStatus = 'paid';
-        finalRemainingAmount = 0;
-      } else if (finalPaidAmount > 0) {
+    // Support split payment calculations
+    const inputPaidAmount = paidAmount !== undefined ? Number(paidAmount) : finalTotal;
+    finalPaidAmount = Math.max(0, inputPaidAmount);
+    finalPaidAmount = Math.min(finalPaidAmount, finalTotal);
+    finalRemainingAmount = Number((finalTotal - finalPaidAmount).toFixed(2));
+
+    let finalPaymentType = paymentType || 'Paid';
+
+    if (finalRemainingAmount > 0) {
+      // If there is an outstanding balance, automatically treat it as Credit (Udhaar)
+      finalPaymentType = 'Credit';
+      if (finalPaidAmount > 0) {
         finalStatus = 'partial';
       } else {
         finalStatus = 'pending';
       }
-      
       finalDueDate = dueDate ? new Date(dueDate) : null;
     } else {
-      // paymentType = 'Paid'
-      finalPaidAmount = finalTotal;
-      finalRemainingAmount = 0;
+      finalPaymentType = 'Paid';
       finalStatus = 'paid';
       finalDueDate = null;
+    }
+
+    // Map custom split payments array from frontend, otherwise default
+    let billPayments = [];
+    if (Array.isArray(req.body.payments) && req.body.payments.length > 0) {
+      billPayments = req.body.payments.map(p => ({
+        amount: Number(p.amount),
+        note: p.method || 'Split payment',
+        date: new Date()
+      }));
+    } else if (finalPaidAmount > 0) {
+      billPayments = [{
+        amount: finalPaidAmount,
+        note: finalPaymentType === 'Credit' ? 'Initial down payment' : 'Full payment at billing',
+        date: new Date()
+      }];
     }
 
     const bill = new Bill({
@@ -123,16 +138,12 @@ const createBill = async (req, res) => {
       customerAddress,
       items: processedItems,
       total: finalTotal,
-      paymentType: paymentType || 'Paid',
+      paymentType: finalPaymentType,
       dueDate: finalDueDate,
       paidAmount: finalPaidAmount,
       remainingAmount: finalRemainingAmount,
       status: finalStatus,
-      payments: finalPaidAmount > 0 ? [{
-        amount: finalPaidAmount,
-        note: paymentType === 'Credit' ? 'Initial down payment' : 'Full payment at billing',
-        date: new Date()
-      }] : []
+      payments: billPayments
     });
 
     const createdBill = await bill.save();
