@@ -584,12 +584,17 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
 
     currentY += footerH;
 
-    // 6. BOTTOM AUTHORISED SIGNATURE
-    const bottomSpace = isA5 ? 40 : 55;
+    // 6. BOTTOM FOOTER & AUTHORISED SIGNATURE
+    const bottomSpace = isA5 ? 15 : 25;
     currentY += bottomSpace;
 
+    if (bFooter) {
+      doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(isA5 ? 6.5 : 8);
+      doc.text(bFooter, margin + 10, currentY, { width: contentWidth - 245, align: 'left' });
+    }
+
     doc.fillColor(textColor).font('Roboto').fontSize(isA5 ? 7.5 : 9);
-    doc.text(`Authorised Signature for ${bName}`, pageWidth - margin - 220, currentY, { width: 220, align: 'right' });
+    doc.text(`Authorised Signature for ${bName}`, pageWidth - margin - 220, currentY + 10, { width: 220, align: 'right' });
 
     // 7. GLOBAL INNER BORDER BOX
     doc.strokeColor('#000000').lineWidth(0.75).rect(margin, margin, contentWidth, doc.page.height - (margin * 2)).stroke();
