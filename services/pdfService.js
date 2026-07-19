@@ -262,13 +262,12 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       textY = doc.y + 2;
     }
     
-    const contactLines = [];
-    if (bPhone) contactLines.push(`Mobile : ${bPhone}`);
-    if (config.businessEmail) {
-      contactLines.push(`Email : ${config.businessEmail}`);
+    if (bPhone) {
+      doc.text(`Mobile : ${bPhone}`, leftX, textY);
+      textY = doc.y + 2;
     }
-    if (contactLines.length > 0) {
-      doc.text(contactLines.join('  |  '), leftX, textY);
+    if (config.businessEmail) {
+      doc.text(`Email : ${config.businessEmail}`, leftX, textY);
       textY = doc.y + 2;
     }
 
