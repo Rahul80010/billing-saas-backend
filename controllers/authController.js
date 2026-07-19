@@ -299,7 +299,13 @@ const updateProfile = async (req, res) => {
     upiId,
     upiName,
     enableInvoiceQr,
-    enableWhatsappQr
+    enableWhatsappQr,
+    defaultPaymentMode,
+    defaultGstRate,
+    enableHsnField,
+    enableDiscountField,
+    enableAutoPrint,
+    defaultUnit
   } = req.body;
 
   try {
@@ -323,6 +329,14 @@ const updateProfile = async (req, res) => {
       user.upiName = upiName !== undefined ? upiName : user.upiName;
       user.enableInvoiceQr = enableInvoiceQr !== undefined ? enableInvoiceQr : user.enableInvoiceQr;
       user.enableWhatsappQr = enableWhatsappQr !== undefined ? enableWhatsappQr : user.enableWhatsappQr;
+      
+      // Billing configurations
+      user.defaultPaymentMode = defaultPaymentMode !== undefined ? defaultPaymentMode : user.defaultPaymentMode;
+      user.defaultGstRate = defaultGstRate !== undefined ? Number(defaultGstRate) : user.defaultGstRate;
+      user.enableHsnField = enableHsnField !== undefined ? enableHsnField : user.enableHsnField;
+      user.enableDiscountField = enableDiscountField !== undefined ? enableDiscountField : user.enableDiscountField;
+      user.enableAutoPrint = enableAutoPrint !== undefined ? enableAutoPrint : user.enableAutoPrint;
+      user.defaultUnit = defaultUnit !== undefined ? defaultUnit : user.defaultUnit;
 
       const updatedUser = await user.save();
       res.json({
@@ -345,6 +359,12 @@ const updateProfile = async (req, res) => {
         upiName: updatedUser.upiName,
         enableInvoiceQr: updatedUser.enableInvoiceQr,
         enableWhatsappQr: updatedUser.enableWhatsappQr,
+        defaultPaymentMode: updatedUser.defaultPaymentMode,
+        defaultGstRate: updatedUser.defaultGstRate,
+        enableHsnField: updatedUser.enableHsnField,
+        enableDiscountField: updatedUser.enableDiscountField,
+        enableAutoPrint: updatedUser.enableAutoPrint,
+        defaultUnit: updatedUser.defaultUnit
       });
     } else {
       res.status(404).json({ message: 'User not found' });

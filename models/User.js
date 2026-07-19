@@ -108,6 +108,32 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  defaultPaymentMode: {
+    type: String,
+    enum: ['Cash', 'Card', 'UPI', 'Credit'],
+    default: 'Cash',
+  },
+  defaultGstRate: {
+    type: Number,
+    default: 18,
+  },
+  enableHsnField: {
+    type: Boolean,
+    default: true,
+  },
+  enableDiscountField: {
+    type: Boolean,
+    default: false,
+  },
+  enableAutoPrint: {
+    type: Boolean,
+    default: false,
+  },
+  defaultUnit: {
+    type: String,
+    enum: ['pcs', 'kg'],
+    default: 'pcs',
+  },
   isAdmin: {
     type: Boolean,
     default: false,
