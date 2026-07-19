@@ -101,7 +101,8 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
   const bAddress = config.businessAddress || '';
   const bPhone = config.businessPhone || '';
   const bGstin = config.gstin || '';
-  const bFooter = config.invoiceFooter || 'Thank you for your purchase! 🙏';
+  const bFooterRaw = config.invoiceFooter || 'Thank you for your purchase! Please visit us again.';
+  const bFooter = bFooterRaw.replace(/[\uD800-\uDFFF]./g, '').trim();
   const bLogo = config.logo || '';
   
   const primaryColor = config.primaryColor || '#093a84';

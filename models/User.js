@@ -73,7 +73,7 @@ const userSchema = new mongoose.Schema({
   invoiceFooter: {
     type: String,
     trim: true,
-    default: 'Thank you for your purchase! Please visit us again. 🙏',
+    default: 'Thank you for your purchase! Please visit us again.',
   },
   logo: {
     type: String,
