@@ -83,6 +83,7 @@ const createBill = async (req, res) => {
         gst,
         unit: item.unit || 'pcs',
         buyingCost: Number(item.buyingCost || 0),
+        imei: item.imei || '',
       });
     }
 

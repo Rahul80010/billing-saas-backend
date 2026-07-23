@@ -311,7 +311,8 @@ const updateProfile = async (req, res) => {
     bankAccountNo,
     bankIfsc,
     bankAccountName,
-    panNumber
+    panNumber,
+    enableImei
   } = req.body;
 
   try {
@@ -351,6 +352,7 @@ const updateProfile = async (req, res) => {
       user.bankIfsc = bankIfsc !== undefined ? bankIfsc : user.bankIfsc;
       user.bankAccountName = bankAccountName !== undefined ? bankAccountName : user.bankAccountName;
       user.panNumber = panNumber !== undefined ? panNumber : user.panNumber;
+      user.enableImei = enableImei !== undefined ? enableImei : user.enableImei;
 
       const updatedUser = await user.save();
       res.json({
@@ -384,7 +386,8 @@ const updateProfile = async (req, res) => {
         bankAccountNo: updatedUser.bankAccountNo,
         bankIfsc: updatedUser.bankIfsc,
         bankAccountName: updatedUser.bankAccountName,
-        panNumber: updatedUser.panNumber
+        panNumber: updatedUser.panNumber,
+        enableImei: updatedUser.enableImei
       });
     } else {
       res.status(404).json({ message: 'User not found' });

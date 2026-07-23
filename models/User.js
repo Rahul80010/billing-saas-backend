@@ -113,6 +113,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  enableImei: {
+    type: Boolean,
+    default: false,
+  },
   defaultPaymentMode: {
     type: String,
     enum: ['Cash', 'Card', 'UPI', 'Credit'],

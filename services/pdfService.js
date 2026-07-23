@@ -428,8 +428,9 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       totalTaxVal += gstVal;
       totalTaxableVal += baseVal;
 
-      const rowHeight = isA5 ? 18 : 24;
-      const itemTextY = currentY + (isA5 ? 4.5 : 6.5);
+      const hasImei = item.imei && item.imei.trim();
+      const rowHeight = hasImei ? (isA5 ? 26 : 34) : (isA5 ? 18 : 24);
+      const itemTextY = currentY + (hasImei ? (isA5 ? 3 : 4) : (isA5 ? 4.5 : 6.5));
 
       // Draw light zebra rows
       if (index % 2 === 1) {
@@ -441,7 +442,14 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       doc.text(`${index + 1}`, colX.sno + 5, itemTextY);
       
       // Draw item name & optional barcode/desc
-      doc.text(item.productName, colX.items + 5, itemTextY, { width: colX.hsn - colX.items - 10, lineBreak: false });
+      if (hasImei) {
+        doc.text(item.productName, colX.items + 5, itemTextY, { width: colX.hsn - colX.items - 10, lineBreak: false });
+        doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(isA5 ? 6 : 7.5);
+        doc.text(`IMEI: ${item.imei.trim()}`, colX.items + 5, itemTextY + (isA5 ? 9 : 12), { width: colX.hsn - colX.items - 10 });
+        doc.fillColor(textColor).font('Roboto').fontSize(isA5 ? 7 : 8.5);
+      } else {
+        doc.text(item.productName, colX.items + 5, itemTextY, { width: colX.hsn - colX.items - 10, lineBreak: false });
+      }
       
       // Draw HSN
       doc.text(item.hsn || '84733030', colX.hsn, itemTextY, { width: colX.qty - colX.hsn, align: 'center' });
@@ -487,8 +495,9 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     
     // Draw intermediate row lines
     let tempY = tableBodyStartY;
-    bill.items.forEach(() => {
-      const rowHeight = isA5 ? 18 : 24;
+    bill.items.forEach((item) => {
+      const hasImei = item.imei && item.imei.trim();
+      const rowHeight = hasImei ? (isA5 ? 26 : 34) : (isA5 ? 18 : 24);
       tempY += rowHeight;
       if (tempY < tableBottomY) {
         doc.moveTo(margin, tempY).lineTo(pageWidth - margin, tempY).stroke();
