@@ -149,7 +149,7 @@ const userSchema = new mongoose.Schema({
   },
   defaultGstRate: {
     type: Number,
-    default: 18,
+    default: 0,
   },
   enableHsnField: {
     type: Boolean,
