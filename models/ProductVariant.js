@@ -57,6 +57,11 @@ const productVariantSchema = new mongoose.Schema({
     enum: ['active', 'inactive'],
     default: 'active',
   },
+  hsnCode: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 }, { timestamps: true });
 
 // Compound index: variant name must be unique within same product

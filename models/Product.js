@@ -46,6 +46,16 @@ const productSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  hsnCode: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  category: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', productSchema);

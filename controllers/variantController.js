@@ -78,7 +78,7 @@ const getVariantByBarcode = async (req, res) => {
 // @access  Private
 const createVariant = async (req, res) => {
   try {
-    const { productId, variantName, barcode, sku, price, buyingCost, stock, lowStockAlert, image, status } = req.body;
+    const { productId, variantName, barcode, sku, price, buyingCost, stock, lowStockAlert, image, status, hsnCode } = req.body;
 
     if (!productId || !variantName || price === undefined || price === null || price === '') {
       return res.status(400).json({ message: 'productId, variantName and price are required' });
@@ -128,6 +128,7 @@ const createVariant = async (req, res) => {
       lowStockAlert: lowStockAlert !== undefined && lowStockAlert !== '' ? Number(lowStockAlert) : 5,
       image: image || '',
       status: status || 'active',
+      hsnCode: hsnCode ? hsnCode.trim() : (product.hsnCode || ''),
     });
 
     const created = await variant.save();
@@ -145,7 +146,7 @@ const createVariant = async (req, res) => {
 // @access  Private
 const updateVariant = async (req, res) => {
   try {
-    const { variantName, barcode, sku, price, buyingCost, stock, lowStockAlert, image, status } = req.body;
+    const { variantName, barcode, sku, price, buyingCost, stock, lowStockAlert, image, status, hsnCode } = req.body;
 
     const variant = await ProductVariant.findOne({ _id: req.params.id, userId: req.user._id });
     if (!variant) {
@@ -173,7 +174,7 @@ const updateVariant = async (req, res) => {
         _id: { $ne: variant._id },
       });
       if (barcodeExists) {
-        return res.status(400).json({ message: `Barcode "${barcode}" is already used by another variant` });
+        return res.status(400).json({ message: `Barcode "${barcode.trim()}" is already used by another variant!` });
       }
     }
 
@@ -185,7 +186,7 @@ const updateVariant = async (req, res) => {
         _id: { $ne: variant._id },
       });
       if (skuExists) {
-        return res.status(400).json({ message: `SKU "${sku}" is already used by another variant` });
+        return res.status(400).json({ message: `SKU "${sku.trim()}" is already used by another variant!` });
       }
     }
 
@@ -198,6 +199,7 @@ const updateVariant = async (req, res) => {
     if (lowStockAlert !== undefined && lowStockAlert !== '') variant.lowStockAlert = Number(lowStockAlert);
     if (image !== undefined) variant.image = image;
     if (status !== undefined) variant.status = status;
+    if (hsnCode !== undefined) variant.hsnCode = hsnCode.trim();
 
     const updated = await variant.save();
     res.json(updated);

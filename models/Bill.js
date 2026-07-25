@@ -45,6 +45,11 @@ const itemSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  hsnCode: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 });
 
 const billSchema = new mongoose.Schema({

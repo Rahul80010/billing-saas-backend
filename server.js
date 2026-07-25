@@ -35,6 +35,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/variants', require('./routes/variantRoutes'));
+app.use('/api/hsn', require('./routes/hsnRoutes'));
 app.use('/api/customers', require('./routes/customerRoutes'));
 app.use('/api/bills', require('./routes/billRoutes'));
 app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
