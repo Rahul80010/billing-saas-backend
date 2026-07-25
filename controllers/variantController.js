@@ -1,21 +1,21 @@
 const ProductVariant = require('../models/ProductVariant');
 const Product = require('../models/Product');
 
-// @desc    Get all variants for a product
-// @route   GET /api/variants?productId=xxx
+// @desc    Get variants (for a product or all user variants)
+// @route   GET /api/variants
 // @access  Private
 const getVariants = async (req, res) => {
   try {
     const { productId } = req.query;
-    if (!productId) {
-      return res.status(400).json({ message: 'productId is required' });
+    let query = { userId: req.user._id };
+    if (productId) {
+      const product = await Product.findOne({ _id: productId, userId: req.user._id });
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' });
+      }
+      query.productId = productId;
     }
-    // Ensure the product belongs to this user
-    const product = await Product.findOne({ _id: productId, userId: req.user._id });
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-    const variants = await ProductVariant.find({ productId, userId: req.user._id }).sort({ createdAt: 1 });
+    const variants = await ProductVariant.find(query).sort({ createdAt: 1 });
     res.json(variants);
   } catch (error) {
     res.status(500).json({ message: error.message });

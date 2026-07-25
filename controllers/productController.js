@@ -1,12 +1,31 @@
 const Product = require('../models/Product');
+const ProductVariant = require('../models/ProductVariant');
 
-// @desc    Get all products
+// @desc    Get all products (with populated variants)
 // @route   GET /api/products
 // @access  Private
 const getProducts = async (req, res) => {
   try {
-    const products = await Product.find({ userId: req.user._id });
-    res.json(products);
+    const products = await Product.find({ userId: req.user._id }).sort({ createdAt: -1 }).lean();
+    const productIds = products.map(p => p._id);
+    const variants = await ProductVariant.find({
+      userId: req.user._id,
+      productId: { $in: productIds }
+    }).sort({ createdAt: 1 }).lean();
+
+    const variantMap = {};
+    variants.forEach(v => {
+      const pid = v.productId.toString();
+      if (!variantMap[pid]) variantMap[pid] = [];
+      variantMap[pid].push(v);
+    });
+
+    const productsWithVariants = products.map(p => ({
+      ...p,
+      variants: variantMap[p._id.toString()] || []
+    }));
+
+    res.json(productsWithVariants);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
