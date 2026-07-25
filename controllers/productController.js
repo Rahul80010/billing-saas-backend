@@ -16,7 +16,7 @@ const getProducts = async (req, res) => {
 // @route   POST /api/products
 // @access  Private
 const createProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode } = req.body;
+  const { name, price, gst, stock, unit, buyingCost, barcode, sku } = req.body;
 
   try {
     if (!name || !name.trim()) {
@@ -44,6 +44,17 @@ const createProduct = async (req, res) => {
       }
     }
 
+    // Check duplicate SKU if provided
+    if (sku && sku.trim()) {
+      const existingSku = await Product.findOne({
+        userId: req.user._id,
+        sku: sku.trim()
+      });
+      if (existingSku) {
+        return res.status(400).json({ message: `Product with SKU "${sku.trim()}" is already added!` });
+      }
+    }
+
     const product = new Product({
       userId: req.user._id,
       name: name.trim(),
@@ -53,6 +64,7 @@ const createProduct = async (req, res) => {
       unit: unit || 'pcs',
       buyingCost: (buyingCost === undefined || buyingCost === null || buyingCost === '') ? 0 : Number(buyingCost),
       barcode: barcode !== undefined ? barcode.trim() : '',
+      sku: sku !== undefined ? sku.trim() : '',
     });
 
     const createdProduct = await product.save();
@@ -66,7 +78,7 @@ const createProduct = async (req, res) => {
 // @route   PUT /api/products/:id
 // @access  Private
 const updateProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode } = req.body;
+  const { name, price, gst, stock, unit, buyingCost, barcode, sku } = req.body;
 
   try {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
@@ -97,6 +109,17 @@ const updateProduct = async (req, res) => {
         }
       }
 
+      if (sku !== undefined && sku.trim() && sku.trim() !== product.sku) {
+        const existingSku = await Product.findOne({
+          userId: req.user._id,
+          sku: sku.trim(),
+          _id: { $ne: product._id }
+        });
+        if (existingSku) {
+          return res.status(400).json({ message: `Product with SKU "${sku.trim()}" is already added!` });
+        }
+      }
+
       product.name = name !== undefined ? name.trim() : product.name;
       product.price = price !== undefined ? price : product.price;
       product.gst = (gst === undefined || gst === null || gst === '') ? 0 : Number(gst);
@@ -104,6 +127,7 @@ const updateProduct = async (req, res) => {
       product.unit = unit !== undefined ? unit : product.unit;
       product.buyingCost = (buyingCost !== undefined && buyingCost !== null && buyingCost !== '') ? Number(buyingCost) : product.buyingCost;
       product.barcode = barcode !== undefined ? barcode.trim() : product.barcode;
+      product.sku = sku !== undefined ? sku.trim() : product.sku;
 
       const updatedProduct = await product.save();
       res.json(updatedProduct);
