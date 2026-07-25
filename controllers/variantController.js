@@ -90,17 +90,21 @@ const createVariant = async (req, res) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    // Check duplicate variant name within product
-    const existing = await ProductVariant.findOne({ productId, userId: req.user._id, variantName: variantName.trim() });
+    // Check duplicate variant name within product (case-insensitive)
+    const existing = await ProductVariant.findOne({
+      productId,
+      userId: req.user._id,
+      variantName: { $regex: new RegExp(`^${variantName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
     if (existing) {
-      return res.status(400).json({ message: `Variant "${variantName}" already exists for this product` });
+      return res.status(400).json({ message: `Variant "${variantName.trim()}" is already added for this product!` });
     }
 
     // Check duplicate barcode globally (within user)
     if (barcode && barcode.trim()) {
       const barcodeExists = await ProductVariant.findOne({ userId: req.user._id, barcode: barcode.trim() });
       if (barcodeExists) {
-        return res.status(400).json({ message: `Barcode "${barcode}" is already used by another variant` });
+        return res.status(400).json({ message: `Barcode "${barcode.trim()}" is already used by another variant!` });
       }
     }
 
@@ -108,7 +112,7 @@ const createVariant = async (req, res) => {
     if (sku && sku.trim()) {
       const skuExists = await ProductVariant.findOne({ userId: req.user._id, sku: sku.trim() });
       if (skuExists) {
-        return res.status(400).json({ message: `SKU "${sku}" is already used by another variant` });
+        return res.status(400).json({ message: `SKU "${sku.trim()}" is already used by another variant!` });
       }
     }
 
@@ -149,15 +153,15 @@ const updateVariant = async (req, res) => {
     }
 
     // Check duplicate variant name within product (exclude self)
-    if (variantName && variantName.trim() !== variant.variantName) {
+    if (variantName && variantName.trim().toLowerCase() !== variant.variantName.toLowerCase()) {
       const nameExists = await ProductVariant.findOne({
         productId: variant.productId,
         userId: req.user._id,
-        variantName: variantName.trim(),
+        variantName: { $regex: new RegExp(`^${variantName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
         _id: { $ne: variant._id },
       });
       if (nameExists) {
-        return res.status(400).json({ message: `Variant "${variantName}" already exists for this product` });
+        return res.status(400).json({ message: `Variant "${variantName.trim()}" is already added for this product!` });
       }
     }
 
