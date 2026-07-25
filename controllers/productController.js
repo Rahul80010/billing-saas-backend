@@ -19,9 +19,34 @@ const createProduct = async (req, res) => {
   const { name, price, gst, stock, unit, buyingCost, barcode } = req.body;
 
   try {
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Product name is required' });
+    }
+
+    // Check duplicate product name (case-insensitive) for this user
+    const existingName = await Product.findOne({
+      userId: req.user._id,
+      name: { $regex: new RegExp(`^${name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
+
+    if (existingName) {
+      return res.status(400).json({ message: `Product "${name.trim()}" is already added! (Yeh product pehle se added hai)` });
+    }
+
+    // Check duplicate barcode if provided
+    if (barcode && barcode.trim()) {
+      const existingBarcode = await Product.findOne({
+        userId: req.user._id,
+        barcode: barcode.trim()
+      });
+      if (existingBarcode) {
+        return res.status(400).json({ message: `Product with barcode "${barcode.trim()}" is already added!` });
+      }
+    }
+
     const product = new Product({
       userId: req.user._id,
-      name,
+      name: name.trim(),
       price,
       gst: (gst === undefined || gst === null || gst === '') ? 0 : Number(gst),
       stock: (stock === undefined || stock === null || stock === '') ? 0 : Number(stock),
@@ -50,7 +75,29 @@ const updateProduct = async (req, res) => {
     const product = await Product.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (product) {
-      product.name = name !== undefined ? name : product.name;
+      if (name !== undefined && name.trim().toLowerCase() !== product.name.toLowerCase()) {
+        const existingName = await Product.findOne({
+          userId: req.user._id,
+          name: { $regex: new RegExp(`^${name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+          _id: { $ne: product._id }
+        });
+        if (existingName) {
+          return res.status(400).json({ message: `Product "${name.trim()}" is already added! (Yeh product pehle se added hai)` });
+        }
+      }
+
+      if (barcode !== undefined && barcode.trim() && barcode.trim() !== product.barcode) {
+        const existingBarcode = await Product.findOne({
+          userId: req.user._id,
+          barcode: barcode.trim(),
+          _id: { $ne: product._id }
+        });
+        if (existingBarcode) {
+          return res.status(400).json({ message: `Product with barcode "${barcode.trim()}" is already added!` });
+        }
+      }
+
+      product.name = name !== undefined ? name.trim() : product.name;
       product.price = price !== undefined ? price : product.price;
       product.gst = (gst === undefined || gst === null || gst === '') ? 0 : Number(gst);
       product.stock = (stock !== undefined && stock !== null && stock !== '') ? Number(stock) : product.stock;
