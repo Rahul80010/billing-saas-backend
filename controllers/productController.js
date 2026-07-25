@@ -16,7 +16,7 @@ const getProducts = async (req, res) => {
 // @route   POST /api/products
 // @access  Private
 const createProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category } = req.body;
+  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert } = req.body;
 
   try {
     if (!name || !name.trim()) {
@@ -67,6 +67,7 @@ const createProduct = async (req, res) => {
       sku: sku !== undefined ? sku.trim() : '',
       hsnCode: hsnCode !== undefined ? hsnCode.trim() : '',
       category: category !== undefined ? category.trim() : '',
+      lowStockAlert: (lowStockAlert === undefined || lowStockAlert === null || lowStockAlert === '') ? 5 : Number(lowStockAlert),
     });
 
     const createdProduct = await product.save();
@@ -80,7 +81,7 @@ const createProduct = async (req, res) => {
 // @route   PUT /api/products/:id
 // @access  Private
 const updateProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category } = req.body;
+  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert } = req.body;
 
   try {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
@@ -132,6 +133,7 @@ const updateProduct = async (req, res) => {
       product.sku = sku !== undefined ? sku.trim() : product.sku;
       if (hsnCode !== undefined) product.hsnCode = hsnCode.trim();
       if (category !== undefined) product.category = category.trim();
+      if (lowStockAlert !== undefined && lowStockAlert !== null && lowStockAlert !== '') product.lowStockAlert = Number(lowStockAlert);
 
       const updatedProduct = await product.save();
       res.json(updatedProduct);

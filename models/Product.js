@@ -56,6 +56,11 @@ const productSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  lowStockAlert: {
+    type: Number,
+    default: 5,
+    min: 0,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', productSchema);
