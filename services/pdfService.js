@@ -259,11 +259,17 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     const rightColX = isA5 ? 270 : 340;
     const rightColWidth = pageWidth - margin - rightColX;
 
-    // Draw top border box
-    doc.rect(margin, currentY, contentWidth, headerBoxHeight).stroke();
+    // --- PREMIUM: Colored top accent bar ---
+    const accentH = isA5 ? 5 : 6;
+    doc.rect(margin, currentY, contentWidth, accentH).fill(primaryColor);
+    currentY += accentH;
+
+    // Draw top border box (reduce height by accent bar)
+    const innerHeaderH = headerBoxHeight - accentH;
+    doc.rect(margin, currentY, contentWidth, innerHeaderH).stroke();
     
     // Draw column splitter inside top box
-    doc.moveTo(rightColX, currentY).lineTo(rightColX, currentY + headerBoxHeight).stroke();
+    doc.moveTo(rightColX, currentY).lineTo(rightColX, currentY + innerHeaderH).stroke();
 
     // Render Company/Merchant Details (Left Column)
     let leftX = margin + 10;
@@ -282,30 +288,31 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       }
     }
 
-    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 11 : 14).text(bName, leftX, textY);
-    textY = doc.y + 2;
+    // Business name in primary color
+    doc.fillColor(primaryColor).font('Roboto-Bold').fontSize(isA5 ? 12 : 15).text(bName.toUpperCase(), leftX, textY);
+    textY = doc.y + 3;
     
-    doc.font('Roboto').fontSize(isA5 ? 7 : 8).fillColor(textColor);
+    doc.font('Roboto').fontSize(isA5 ? 7 : 8.5).fillColor(secondaryText);
     if (bAddress) {
       doc.text(bAddress, leftX, textY, { width: rightColX - leftX - 10 });
       textY = doc.y + 2;
     }
     
     if (bPhone) {
-      doc.text(`Mobile : ${bPhone}`, leftX, textY);
+      doc.fillColor(textColor).text(`Mobile : ${bPhone}`, leftX, textY);
       textY = doc.y + 2;
     }
     if (config.businessEmail) {
-      doc.text(`Email : ${config.businessEmail}`, leftX, textY);
+      doc.fillColor(textColor).text(`Email : ${config.businessEmail}`, leftX, textY);
       textY = doc.y + 2;
     }
 
     if (bGstin) {
-      doc.text(`GSTIN : ${bGstin}`, leftX, textY);
+      doc.fillColor(textColor).text(`GSTIN : ${bGstin}`, leftX, textY);
       textY = doc.y + 2;
     }
     if (panNum) {
-      doc.text(`PAN Number : ${panNum}`, leftX, textY);
+      doc.fillColor(textColor).text(`PAN : ${panNum}`, leftX, textY);
       textY = doc.y + 2;
     }
 
@@ -313,22 +320,23 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     let rightX = rightColX + 10;
     let rightY = currentY + 10;
 
-    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 12 : 14).text('TAX INVOICE', rightX, rightY);
-    rightY = doc.y + 4;
+    // TAX INVOICE title in primary color
+    doc.fillColor(primaryColor).font('Roboto-Bold').fontSize(isA5 ? 12 : 15).text('TAX INVOICE', rightX, rightY);
+    rightY = doc.y + 5;
 
-    // ORIGINAL FOR RECIPIENT tag
-    const badgeW = isA5 ? 100 : 130;
-    const badgeH = isA5 ? 12 : 14;
-    doc.rect(rightX, rightY, badgeW, badgeH).fillColor('#f3f4f6').fillAndStroke('#f3f4f6', '#cccccc');
-    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 6 : 7).text('ORIGINAL FOR RECIPIENT', rightX, rightY + (isA5 ? 2.5 : 3.5), { align: 'center', width: badgeW });
-    rightY += badgeH + 6;
+    // ORIGINAL FOR RECIPIENT — premium dark solid badge
+    const badgeW = isA5 ? 108 : 138;
+    const badgeH = isA5 ? 13 : 16;
+    doc.rect(rightX, rightY, badgeW, badgeH).fill(primaryColor);
+    doc.fillColor('#ffffff').font('Roboto-Bold').fontSize(isA5 ? 6 : 7).text('ORIGINAL FOR RECIPIENT', rightX, rightY + (isA5 ? 3 : 4.5), { align: 'center', width: badgeW });
+    rightY += badgeH + 8;
 
     // Invoice details table inside right header box
     doc.font('Roboto').fontSize(isA5 ? 7 : 8.5).fillColor(textColor);
     const detailsRow = (label, val) => {
-      doc.font('Roboto').text(label, rightX, rightY);
-      doc.font('Roboto-Bold').text(val, rightX + (isA5 ? 55 : 75), rightY, { width: rightColWidth - (isA5 ? 70 : 95), align: 'right' });
-      rightY = doc.y + 2.5;
+      doc.fillColor(secondaryText).font('Roboto').text(label, rightX, rightY);
+      doc.fillColor(textColor).font('Roboto-Bold').text(val, rightX + (isA5 ? 55 : 75), rightY, { width: rightColWidth - (isA5 ? 70 : 95), align: 'right' });
+      rightY = doc.y + 3;
     };
 
     const invoiceNo = `INV-${bill._id.toString().toUpperCase().slice(-6)}`;
@@ -339,19 +347,19 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       detailsRow('Due Date', new Date(bill.dueDate).toLocaleDateString('en-IN', { dateStyle: 'medium' }));
     }
 
-    currentY += headerBoxHeight;
+    currentY += innerHeaderH;
 
     // 2. BILL TO & SHIP TO Box
     const clientBoxHeight = isA5 ? 45 : 60;
     doc.rect(margin, currentY, contentWidth, clientBoxHeight).stroke();
     
-    // Header divider line (horizontal)
-    const clientHeaderH = isA5 ? 13 : 16;
-    doc.rect(margin, currentY, contentWidth, clientHeaderH).fillColor('#f3f4f6').fillAndStroke('#f3f4f6', '#cccccc');
+    // Header divider line (horizontal) — branded color
+    const clientHeaderH = isA5 ? 14 : 17;
+    doc.rect(margin, currentY, contentWidth, clientHeaderH).fill(primaryColor);
     
-    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
-    doc.text('BILL TO', margin + 10, currentY + (isA5 ? 3 : 4));
-    doc.text('SHIP TO', (pageWidth / 2) + 5, currentY + (isA5 ? 3 : 4));
+    doc.fillColor('#ffffff').font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
+    doc.text('BILL TO', margin + 10, currentY + (isA5 ? 3.5 : 5));
+    doc.text('SHIP TO', (pageWidth / 2) + 5, currentY + (isA5 ? 3.5 : 5));
 
     // Vertical splitter for client boxes
     doc.moveTo(pageWidth / 2, currentY).lineTo(pageWidth / 2, currentY + clientBoxHeight).stroke();
@@ -380,9 +388,9 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
 
     currentY += clientBoxHeight;
 
-    // 3. Items Table Header
-    const tableHeaderH = isA5 ? 16 : 20;
-    doc.rect(margin, currentY, contentWidth, tableHeaderH).fillColor('#f3f4f6');
+    // 3. Items Table Header — premium dark branded background
+    const tableHeaderH = isA5 ? 17 : 22;
+    doc.rect(margin, currentY, contentWidth, tableHeaderH).fill(primaryColor);
     
     // Column coordinates definitions
     const colX = {
@@ -395,15 +403,15 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       amount: margin + contentWidth - (isA5 ? 35 : 45),
     };
 
-    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
+    doc.fillColor('#ffffff').font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
     
-    doc.text('S.NO.', colX.sno + 5, currentY + (isA5 ? 4 : 5.5));
-    doc.text('ITEMS', colX.items + 5, currentY + (isA5 ? 4 : 5.5));
-    doc.text('HSN', colX.hsn, currentY + (isA5 ? 4 : 5.5), { width: colX.qty - colX.hsn, align: 'center' });
-    doc.text('QTY.', colX.qty, currentY + (isA5 ? 4 : 5.5), { width: colX.rate - colX.qty, align: 'center' });
-    doc.text('RATE', colX.rate, currentY + (isA5 ? 4 : 5.5), { width: colX.tax - colX.rate, align: 'center' });
-    doc.text('TAX', colX.tax, currentY + (isA5 ? 4 : 5.5), { width: colX.amount - colX.tax, align: 'center' });
-    doc.text('AMOUNT', colX.amount, currentY + (isA5 ? 4 : 5.5), { width: (pageWidth - margin) - colX.amount - 5, align: 'right' });
+    doc.text('S.NO.', colX.sno + 5, currentY + (isA5 ? 5 : 7));
+    doc.text('ITEMS', colX.items + 5, currentY + (isA5 ? 5 : 7));
+    doc.text('HSN', colX.hsn, currentY + (isA5 ? 5 : 7), { width: colX.qty - colX.hsn, align: 'center' });
+    doc.text('QTY.', colX.qty, currentY + (isA5 ? 5 : 7), { width: colX.rate - colX.qty, align: 'center' });
+    doc.text('RATE', colX.rate, currentY + (isA5 ? 5 : 7), { width: colX.tax - colX.rate, align: 'center' });
+    doc.text('TAX', colX.tax, currentY + (isA5 ? 5 : 7), { width: colX.amount - colX.tax, align: 'center' });
+    doc.text('AMOUNT', colX.amount, currentY + (isA5 ? 5 : 7), { width: (pageWidth - margin) - colX.amount - 5, align: 'right' });
 
     currentY += tableHeaderH;
     const tableBodyStartY = currentY;
@@ -461,8 +469,10 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       // Draw RATE (base exclusive)
       doc.text(`₹${price.toFixed(2)}`, colX.rate, itemTextY, { width: colX.tax - colX.rate, align: 'center' });
       
-      // Draw TAX rate & amount
-      doc.text(`₹${gstVal.toFixed(2)}\n(${gst}%)`, colX.tax, itemTextY - (isA5 ? 1 : 2.5), { width: colX.amount - colX.tax, align: 'center' });
+      // Draw TAX rate & amount — show clean dash when 0%
+      const taxDisplay = gst === 0 ? '0%' : `₹${gstVal.toFixed(2)}\n(${gst}%)`;
+      const taxTextY = gst === 0 ? itemTextY : itemTextY - (isA5 ? 1 : 2.5);
+      doc.text(taxDisplay, colX.tax, taxTextY, { width: colX.amount - colX.tax, align: 'center' });
       
       // Draw AMOUNT
       doc.text(`₹${totalItem.toFixed(2)}`, colX.amount, itemTextY, { width: (pageWidth - margin) - colX.amount - 5, align: 'right' });
@@ -472,15 +482,15 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
 
     const tableBottomY = currentY;
 
-    // 4. SUBTOTAL ROW
-    const subtotalH = isA5 ? 16 : 20;
-    doc.rect(margin, tableBottomY, contentWidth, subtotalH).fillColor('#f3f4f6');
-    doc.fillColor(textColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
+    // 4. SUBTOTAL ROW — subtle branded tint
+    const subtotalH = isA5 ? 17 : 21;
+    doc.rect(margin, tableBottomY, contentWidth, subtotalH).fill('#eef2ff');
+    doc.fillColor(primaryColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8);
 
-    doc.text('SUBTOTAL', colX.items + 5, tableBottomY + (isA5 ? 4 : 5.5));
-    doc.text(`${totalQty} PCS`, colX.qty, tableBottomY + (isA5 ? 4 : 5.5), { width: colX.rate - colX.qty, align: 'center' });
-    doc.text(`₹${totalTaxVal.toFixed(2)}`, colX.tax, tableBottomY + (isA5 ? 4 : 5.5), { width: colX.amount - colX.tax, align: 'center' });
-    doc.text(`₹${Number(bill.total).toFixed(2)}`, colX.amount, tableBottomY + (isA5 ? 4 : 5.5), { width: (pageWidth - margin) - colX.amount - 5, align: 'right' });
+    doc.text('SUBTOTAL', colX.items + 5, tableBottomY + (isA5 ? 5 : 6.5));
+    doc.text(`${totalQty} PCS`, colX.qty, tableBottomY + (isA5 ? 5 : 6.5), { width: colX.rate - colX.qty, align: 'center' });
+    doc.text(totalTaxVal > 0 ? `₹${totalTaxVal.toFixed(2)}` : '—', colX.tax, tableBottomY + (isA5 ? 5 : 6.5), { width: colX.amount - colX.tax, align: 'center' });
+    doc.text(`₹${Number(bill.total).toFixed(2)}`, colX.amount, tableBottomY + (isA5 ? 5 : 6.5), { width: (pageWidth - margin) - colX.amount - 5, align: 'right' });
 
     currentY = tableBottomY + subtotalH;
 
@@ -648,19 +658,25 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
     currentY += footerH;
 
     // 6. BOTTOM FOOTER & AUTHORISED SIGNATURE
-    const bottomSpace = isA5 ? 15 : 25;
+    const bottomSpace = isA5 ? 18 : 28;
     currentY += bottomSpace;
 
     if (bFooter) {
-      doc.fillColor(secondaryText).font('Roboto-Italic').fontSize(isA5 ? 6.5 : 8);
+      doc.fillColor(primaryColor).font('Roboto-Italic').fontSize(isA5 ? 7 : 8.5);
       doc.text(bFooter, margin + 10, currentY, { width: contentWidth - 245, align: 'left' });
     }
 
-    doc.fillColor(textColor).font('Roboto').fontSize(isA5 ? 7.5 : 9);
-    doc.text(`Authorised Signature for ${bName}`, pageWidth - margin - 230, currentY + 10, { width: 220, align: 'right' });
+    // Signature line above name
+    const sigLineX = pageWidth - margin - 230;
+    doc.strokeColor('#cccccc').lineWidth(0.5).moveTo(sigLineX + 10, currentY + (isA5 ? 16 : 20)).lineTo(pageWidth - margin - 10, currentY + (isA5 ? 16 : 20)).stroke();
+    doc.fillColor(secondaryText).font('Roboto').fontSize(isA5 ? 6.5 : 8);
+    doc.text('Authorised Signatory', sigLineX + 10, currentY + (isA5 ? 18 : 22), { width: 210, align: 'center' });
+    doc.fillColor(primaryColor).font('Roboto-Bold').fontSize(isA5 ? 7 : 8.5);
+    doc.text(`for ${bName.toUpperCase()}`, sigLineX + 10, currentY + (isA5 ? 26 : 31), { width: 210, align: 'center' });
 
-    // 7. GLOBAL INNER BORDER BOX
-    doc.strokeColor('#000000').lineWidth(0.75).rect(margin, margin, contentWidth, doc.page.height - (margin * 2)).stroke();
+    // 7. GLOBAL INNER BORDER BOX — premium double border effect
+    doc.strokeColor(primaryColor).lineWidth(1.5).rect(margin - 1, margin - 1, contentWidth + 2, doc.page.height - (margin * 2) + 2).stroke();
+    doc.strokeColor('#000000').lineWidth(0.5).rect(margin + 2, margin + 2, contentWidth - 4, doc.page.height - (margin * 2) - 4).stroke();
   }
 
   doc.end();

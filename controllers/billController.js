@@ -1,5 +1,6 @@
 const Bill = require('../models/Bill');
 const Product = require('../models/Product');
+const ProductVariant = require('../models/ProductVariant');
 const { sendWhatsappBill, sendWhatsAppMessage, formatPhoneNumber, uploadWhatsAppMedia } = require('../services/whatsappService');
 const { generateInvoicePdf } = require('../services/pdfService');
 const WhatsAppConnection = require('../models/WhatsAppConnection');
@@ -84,6 +85,8 @@ const createBill = async (req, res) => {
         unit: item.unit || 'pcs',
         buyingCost: Number(item.buyingCost || 0),
         imei: item.imei || '',
+        variantId: item.variantId || null,
+        variantName: item.variantName || '',
       });
     }
 
@@ -165,32 +168,63 @@ const createBill = async (req, res) => {
       console.error('Failed to create bill notification:', notifErr);
     }
 
-    // Auto deduct product stock in the background (non-blocking)
+    // Auto deduct stock — variant-aware (non-blocking)
     try {
       for (const item of processedItems) {
-        const updatedProduct = await Product.findOneAndUpdate(
-          { userId: req.user._id, name: item.productName },
-          { $inc: { stock: -item.quantity } },
-          { new: true }
-        );
-        if (updatedProduct) {
-          const Notification = require('../models/Notification');
-          if (updatedProduct.stock <= 0) {
-            await Notification.create({
-              user: req.user._id,
-              title: 'Out of Stock Alert',
-              message: `Product "${updatedProduct.name}" is completely out of stock!`,
-              type: 'stock',
-              link: '/products'
-            });
-          } else if (updatedProduct.stock <= 5) {
-            await Notification.create({
-              user: req.user._id,
-              title: 'Low Stock Warning',
-              message: `Product "${updatedProduct.name}" is running low on stock. Only ${updatedProduct.stock} items left.`,
-              type: 'stock',
-              link: '/products'
-            });
+        const Notification = require('../models/Notification');
+
+        if (item.variantId) {
+          // Deduct from ProductVariant stock
+          const updatedVariant = await ProductVariant.findOneAndUpdate(
+            { _id: item.variantId, userId: req.user._id },
+            { $inc: { stock: -item.quantity } },
+            { new: true }
+          );
+          if (updatedVariant) {
+            const threshold = updatedVariant.lowStockAlert ?? 5;
+            if (updatedVariant.stock <= 0) {
+              await Notification.create({
+                user: req.user._id,
+                title: 'Out of Stock Alert',
+                message: `Variant "${item.variantName}" of "${item.productName.split(' — ')[0]}" is completely out of stock!`,
+                type: 'stock',
+                link: '/products'
+              });
+            } else if (updatedVariant.stock <= threshold) {
+              await Notification.create({
+                user: req.user._id,
+                title: 'Low Stock Warning',
+                message: `Variant "${item.variantName}" is running low. Only ${updatedVariant.stock} left.`,
+                type: 'stock',
+                link: '/products'
+              });
+            }
+          }
+        } else {
+          // Existing product stock deduction (unchanged behaviour)
+          const updatedProduct = await Product.findOneAndUpdate(
+            { userId: req.user._id, name: item.productName },
+            { $inc: { stock: -item.quantity } },
+            { new: true }
+          );
+          if (updatedProduct) {
+            if (updatedProduct.stock <= 0) {
+              await Notification.create({
+                user: req.user._id,
+                title: 'Out of Stock Alert',
+                message: `Product "${updatedProduct.name}" is completely out of stock!`,
+                type: 'stock',
+                link: '/products'
+              });
+            } else if (updatedProduct.stock <= 5) {
+              await Notification.create({
+                user: req.user._id,
+                title: 'Low Stock Warning',
+                message: `Product "${updatedProduct.name}" is running low on stock. Only ${updatedProduct.stock} items left.`,
+                type: 'stock',
+                link: '/products'
+              });
+            }
           }
         }
       }

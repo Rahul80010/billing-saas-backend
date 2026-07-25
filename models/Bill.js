@@ -35,6 +35,16 @@ const itemSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  variantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ProductVariant',
+    default: null,
+  },
+  variantName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 });
 
 const billSchema = new mongoose.Schema({
