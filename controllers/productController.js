@@ -1,7 +1,7 @@
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 
-// @desc    Get all products (with populated variants)
+// @desc    Get all products (with populated variants & live recalculated stats)
 // @route   GET /api/products
 // @access  Private
 const getProducts = async (req, res) => {
@@ -15,15 +15,33 @@ const getProducts = async (req, res) => {
 
     const variantMap = {};
     variants.forEach(v => {
-      const pid = v.productId.toString();
-      if (!variantMap[pid]) variantMap[pid] = [];
-      variantMap[pid].push(v);
+      const pid = v.productId ? v.productId.toString() : '';
+      if (pid) {
+        if (!variantMap[pid]) variantMap[pid] = [];
+        variantMap[pid].push(v);
+      }
     });
 
-    const productsWithVariants = products.map(p => ({
-      ...p,
-      variants: variantMap[p._id.toString()] || []
-    }));
+    const productsWithVariants = products.map(p => {
+      const pVariants = variantMap[p._id.toString()] || [];
+      let minPrice = p.price;
+      let minBuyingCost = p.buyingCost || 0;
+      let totalStock = p.stock || 0;
+
+      if (pVariants.length > 0) {
+        minPrice = Math.min(...pVariants.map(v => v.price));
+        minBuyingCost = Math.min(...pVariants.map(v => v.buyingCost || 0));
+        totalStock = pVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
+      }
+
+      return {
+        ...p,
+        price: pVariants.length > 0 ? minPrice : p.price,
+        buyingCost: pVariants.length > 0 ? minBuyingCost : p.buyingCost,
+        stock: pVariants.length > 0 ? totalStock : p.stock,
+        variants: pVariants
+      };
+    });
 
     res.json(productsWithVariants);
   } catch (error) {
@@ -31,11 +49,11 @@ const getProducts = async (req, res) => {
   }
 };
 
-// @desc    Create a product
+// @desc    Create a product (with embedded variants support)
 // @route   POST /api/products
 // @access  Private
 const createProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description } = req.body;
+  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, variants } = req.body;
 
   try {
     if (!name || !name.trim()) {
@@ -77,7 +95,7 @@ const createProduct = async (req, res) => {
     const product = new Product({
       userId: req.user._id,
       name: name.trim(),
-      price,
+      price: (price === undefined || price === null || price === '') ? 0 : Number(price),
       gst: (gst === undefined || gst === null || gst === '') ? 0 : Number(gst),
       stock: (stock === undefined || stock === null || stock === '') ? 0 : Number(stock),
       unit: unit || 'pcs',
@@ -92,17 +110,55 @@ const createProduct = async (req, res) => {
     });
 
     const createdProduct = await product.save();
-    res.status(201).json(createdProduct);
+
+    // If embedded variants array passed (e.g. from Mobile App)
+    let createdVariants = [];
+    if (Array.isArray(variants) && variants.length > 0) {
+      for (const v of variants) {
+        if (v.variantName && v.price !== undefined) {
+          const newVar = new ProductVariant({
+            productId: createdProduct._id,
+            userId: req.user._id,
+            variantName: String(v.variantName).trim(),
+            barcode: v.barcode ? String(v.barcode).trim() : '',
+            sku: v.sku ? String(v.sku).trim() : '',
+            price: Number(v.price),
+            buyingCost: v.buyingCost !== undefined && v.buyingCost !== '' ? Number(v.buyingCost) : 0,
+            stock: v.stock !== undefined && v.stock !== '' ? Number(v.stock) : 0,
+            lowStockAlert: v.lowStockAlert !== undefined && v.lowStockAlert !== '' ? Number(v.lowStockAlert) : 5,
+            status: v.status || 'active',
+            hsnCode: v.hsnCode ? String(v.hsnCode).trim() : (createdProduct.hsnCode || '')
+          });
+          const savedVar = await newVar.save();
+          createdVariants.push(savedVar);
+        }
+      }
+
+      if (createdVariants.length > 0) {
+        const minPrice = Math.min(...createdVariants.map(v => v.price));
+        const minBuyingCost = Math.min(...createdVariants.map(v => v.buyingCost || 0));
+        const totalStock = createdVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
+
+        createdProduct.price = minPrice;
+        createdProduct.buyingCost = minBuyingCost;
+        createdProduct.stock = totalStock;
+        await createdProduct.save();
+      }
+    }
+
+    const responseObj = createdProduct.toObject();
+    responseObj.variants = createdVariants;
+    res.status(201).json(responseObj);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
 };
 
-// @desc    Update a product
+// @desc    Update a product (with embedded variants support)
 // @route   PUT /api/products/:id
 // @access  Private
 const updateProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description } = req.body;
+  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, variants } = req.body;
 
   try {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
@@ -145,7 +201,7 @@ const updateProduct = async (req, res) => {
       }
 
       product.name = name !== undefined ? name.trim() : product.name;
-      product.price = price !== undefined ? price : product.price;
+      product.price = price !== undefined ? Number(price) : product.price;
       product.gst = (gst === undefined || gst === null || gst === '') ? 0 : Number(gst);
       product.stock = (stock !== undefined && stock !== null && stock !== '') ? Number(stock) : product.stock;
       product.unit = unit !== undefined ? unit : product.unit;
@@ -158,8 +214,45 @@ const updateProduct = async (req, res) => {
       if (lowStockAlertEnabled !== undefined) product.lowStockAlertEnabled = Boolean(lowStockAlertEnabled);
       if (description !== undefined) product.description = description.trim();
 
+      // If variants array passed
+      if (Array.isArray(variants)) {
+        for (const v of variants) {
+          if (v._id) {
+            await ProductVariant.updateOne(
+              { _id: v._id, userId: req.user._id },
+              { $set: v }
+            );
+          } else if (v.variantName && v.price !== undefined) {
+            const newVar = new ProductVariant({
+              productId: product._id,
+              userId: req.user._id,
+              variantName: String(v.variantName).trim(),
+              barcode: v.barcode ? String(v.barcode).trim() : '',
+              sku: v.sku ? String(v.sku).trim() : '',
+              price: Number(v.price),
+              buyingCost: v.buyingCost !== undefined && v.buyingCost !== '' ? Number(v.buyingCost) : 0,
+              stock: v.stock !== undefined && v.stock !== '' ? Number(v.stock) : 0,
+              lowStockAlert: v.lowStockAlert !== undefined && v.lowStockAlert !== '' ? Number(v.lowStockAlert) : 5,
+              status: v.status || 'active',
+              hsnCode: v.hsnCode ? String(v.hsnCode).trim() : (product.hsnCode || '')
+            });
+            await newVar.save();
+          }
+        }
+      }
+
+      // Recalculate stats from variants
+      const existingVariants = await ProductVariant.find({ productId: product._id });
+      if (existingVariants.length > 0) {
+        product.price = Math.min(...existingVariants.map(v => v.price));
+        product.buyingCost = Math.min(...existingVariants.map(v => v.buyingCost || 0));
+        product.stock = existingVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
+      }
+
       const updatedProduct = await product.save();
-      res.json(updatedProduct);
+      const responseObj = updatedProduct.toObject();
+      responseObj.variants = existingVariants;
+      res.json(responseObj);
     } else {
       res.status(404).json({ message: 'Product not found' });
     }
@@ -179,6 +272,8 @@ const deleteProduct = async (req, res) => {
     const product = await Product.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (product) {
+      // Also delete associated variants
+      await ProductVariant.deleteMany({ productId: product._id });
       await product.deleteOne();
       res.json({ message: 'Product removed' });
     } else {
