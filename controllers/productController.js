@@ -53,7 +53,7 @@ const getProducts = async (req, res) => {
 // @route   POST /api/products
 // @access  Private
 const createProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, variants } = req.body;
+  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, image, variants } = req.body;
 
   try {
     if (!name || !name.trim()) {
@@ -107,6 +107,7 @@ const createProduct = async (req, res) => {
       lowStockAlert: (lowStockAlert === undefined || lowStockAlert === null || lowStockAlert === '') ? 5 : Number(lowStockAlert),
       lowStockAlertEnabled: lowStockAlertEnabled !== undefined ? Boolean(lowStockAlertEnabled) : true,
       description: description !== undefined ? description.trim() : '',
+      image: image !== undefined ? image.trim() : '',
     });
 
     const createdProduct = await product.save();
@@ -126,6 +127,7 @@ const createProduct = async (req, res) => {
             buyingCost: v.buyingCost !== undefined && v.buyingCost !== '' ? Number(v.buyingCost) : 0,
             stock: v.stock !== undefined && v.stock !== '' ? Number(v.stock) : 0,
             lowStockAlert: v.lowStockAlert !== undefined && v.lowStockAlert !== '' ? Number(v.lowStockAlert) : 5,
+            image: v.image ? String(v.image).trim() : '',
             status: v.status || 'active',
             hsnCode: v.hsnCode ? String(v.hsnCode).trim() : (createdProduct.hsnCode || '')
           });
@@ -158,7 +160,7 @@ const createProduct = async (req, res) => {
 // @route   PUT /api/products/:id
 // @access  Private
 const updateProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, variants } = req.body;
+  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, image, variants } = req.body;
 
   try {
     if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
@@ -213,6 +215,7 @@ const updateProduct = async (req, res) => {
       if (lowStockAlert !== undefined && lowStockAlert !== null && lowStockAlert !== '') product.lowStockAlert = Number(lowStockAlert);
       if (lowStockAlertEnabled !== undefined) product.lowStockAlertEnabled = Boolean(lowStockAlertEnabled);
       if (description !== undefined) product.description = description.trim();
+      if (image !== undefined) product.image = image.trim();
 
       // If variants array passed
       if (Array.isArray(variants)) {
