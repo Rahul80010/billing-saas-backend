@@ -87,7 +87,8 @@ const createBill = async (req, res) => {
         imei: item.imei || '',
         variantId: item.variantId || null,
         variantName: item.variantName || '',
-        hsnCode: item.hsnCode || item.hsn || '',
+        hsnCode: (item.hsnCode || item.hsn || '').trim(),
+        hsn: (item.hsnCode || item.hsn || '').trim(),
       });
     }
 

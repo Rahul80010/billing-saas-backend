@@ -460,7 +460,8 @@ const generateInvoicePdf = (bill, businessConfig, res) => {
       }
       
       // Draw HSN
-      doc.text(item.hsn || '84733030', colX.hsn, itemTextY, { width: colX.qty - colX.hsn, align: 'center' });
+      const itemHsn = (item.hsnCode || item.hsn || '').toString().trim();
+      doc.text(itemHsn ? itemHsn : '-', colX.hsn, itemTextY, { width: colX.qty - colX.hsn, align: 'center' });
       
       // Draw QTY
       const unit = item.unit === 'kg' ? ' KG' : ' PCS';

@@ -50,6 +50,11 @@ const itemSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  hsn: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 });
 
 const billSchema = new mongoose.Schema({
