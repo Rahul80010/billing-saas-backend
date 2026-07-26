@@ -19,6 +19,15 @@ const getDateBounds = (timeframe, customStart, customEnd) => {
     yesterday.setDate(yesterday.getDate() - 1);
     start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
     end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+  } else if (timeframe === '7days') {
+    start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    start.setHours(0, 0, 0, 0);
+  } else if (timeframe === '15days') {
+    start = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+    start.setHours(0, 0, 0, 0);
+  } else if (timeframe === '30days') {
+    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    start.setHours(0, 0, 0, 0);
   } else if (timeframe === 'weekly') {
     const monday = new Date(now);
     const day = now.getDay();
