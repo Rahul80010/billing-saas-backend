@@ -132,12 +132,35 @@ const createVariant = async (req, res) => {
     });
 
     const created = await variant.save();
+    await updateParentProductStats(productId);
     res.status(201).json(created);
   } catch (error) {
     if (error.code === 11000) {
       return res.status(400).json({ message: 'Variant name already exists for this product' });
     }
     res.status(400).json({ message: error.message });
+  }
+};
+
+// Helper: recalculate and update parent product price, buyingCost, stock
+const updateParentProductStats = async (productId) => {
+  try {
+    const variants = await ProductVariant.find({ productId });
+    const product = await Product.findById(productId);
+    if (!product) return;
+
+    if (variants.length > 0) {
+      const minPrice = Math.min(...variants.map(v => v.price));
+      const minBuyingCost = Math.min(...variants.map(v => v.buyingCost || 0));
+      const totalStock = variants.reduce((sum, v) => sum + (v.stock || 0), 0);
+
+      product.price = minPrice;
+      product.buyingCost = minBuyingCost;
+      product.stock = totalStock;
+    }
+    await product.save();
+  } catch (err) {
+    console.error('Error updating parent product stats:', err);
   }
 };
 
@@ -202,6 +225,7 @@ const updateVariant = async (req, res) => {
     if (hsnCode !== undefined) variant.hsnCode = hsnCode.trim();
 
     const updated = await variant.save();
+    await updateParentProductStats(variant.productId);
     res.json(updated);
   } catch (error) {
     if (error.code === 11000) {
@@ -220,7 +244,9 @@ const deleteVariant = async (req, res) => {
     if (!variant) {
       return res.status(404).json({ message: 'Variant not found' });
     }
+    const pid = variant.productId;
     await variant.deleteOne();
+    await updateParentProductStats(pid);
     res.json({ message: 'Variant deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
