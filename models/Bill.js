@@ -88,6 +88,11 @@ const billSchema = new mongoose.Schema({
     enum: ['Paid', 'Credit'],
     default: 'Paid',
   },
+  paymentMethod: {
+    type: String,
+    trim: true,
+    default: 'Cash',
+  },
   dueDate: {
     type: Date,
     default: null,

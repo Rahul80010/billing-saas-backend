@@ -145,6 +145,7 @@ const createBill = async (req, res) => {
       items: processedItems,
       total: finalTotal,
       paymentType: finalPaymentType,
+      paymentMethod: req.body.paymentMethod || (req.body.payments && req.body.payments.length > 0 ? req.body.payments[0].method : 'Cash'),
       dueDate: finalDueDate,
       paidAmount: finalPaidAmount,
       remainingAmount: finalRemainingAmount,

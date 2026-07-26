@@ -120,13 +120,49 @@ const getReportDashboard = async (req, res) => {
     const totalInventoryValue = products.reduce((sum, p) => sum + ((p.stock || 0) * (p.price || 0)), 0);
 
     // 2. Charts Datasets
-    // Payment Methods distribution
-    const paymentMethods = { Cash: 0, UPI: 0, Card: 0, Credit: 0 };
+    // Payment Methods distribution (Exact Rupees Amount breakdown for Cash, UPI, Card, Credit)
+    const paymentMethodsMap = { Cash: 0, UPI: 0, Card: 0, Credit: 0 };
+
     bills.forEach(b => {
-      if (b.paymentType === 'Credit') {
-        paymentMethods.Credit += b.total || 0;
-      } else {
-        paymentMethods.UPI += b.total || 0; // Defaulting to UPI/Cash mix
+      // 1. Credit Dues
+      if (b.remainingAmount > 0) {
+        paymentMethodsMap.Credit += (b.remainingAmount || 0);
+      }
+
+      // 2. Paid Amounts (inspect payments array and paymentMethod/notes)
+      if (b.payments && b.payments.length > 0) {
+        b.payments.forEach(p => {
+          const noteLower = (p.note || '').toLowerCase();
+          const amt = Number(p.amount || 0);
+          if (amt <= 0) return;
+
+          if (noteLower.includes('upi') || noteLower.includes('gpay') || noteLower.includes('phonepe') || noteLower.includes('paytm') || noteLower.includes('qr')) {
+            paymentMethodsMap.UPI += amt;
+          } else if (noteLower.includes('card') || noteLower.includes('pos') || noteLower.includes('debit') || noteLower.includes('credit card')) {
+            paymentMethodsMap.Card += amt;
+          } else if (noteLower.includes('cash')) {
+            paymentMethodsMap.Cash += amt;
+          } else {
+            const topMethodLower = (b.paymentMethod || '').toLowerCase();
+            if (topMethodLower.includes('upi')) {
+              paymentMethodsMap.UPI += amt;
+            } else if (topMethodLower.includes('card')) {
+              paymentMethodsMap.Card += amt;
+            } else {
+              paymentMethodsMap.Cash += amt;
+            }
+          }
+        });
+      } else if (b.paidAmount > 0) {
+        const topMethodLower = (b.paymentMethod || '').toLowerCase();
+        const amt = b.paidAmount;
+        if (topMethodLower.includes('upi')) {
+          paymentMethodsMap.UPI += amt;
+        } else if (topMethodLower.includes('card')) {
+          paymentMethodsMap.Card += amt;
+        } else {
+          paymentMethodsMap.Cash += amt;
+        }
       }
     });
 
@@ -175,7 +211,7 @@ const getReportDashboard = async (req, res) => {
       },
       charts: {
         monthlyRevenue: monthlyRevenueTrend,
-        paymentMethods: Object.entries(paymentMethods).map(([name, value]) => ({ name, value })),
+        paymentMethods: Object.entries(paymentMethodsMap).map(([name, value]) => ({ name, value: Number(value.toFixed(2)) })),
         expenseCategories: Object.entries(expenseBreakdown).map(([category, amount]) => ({ name: category, value: amount })),
         stockStatus,
         topCustomers
