@@ -71,8 +71,7 @@ const productSchema = new mongoose.Schema({
     default: '',
   },
   image: {
-    type: String,
-    trim: true,
+    type: mongoose.Schema.Types.Mixed,
     default: '',
   },
 }, { timestamps: true });

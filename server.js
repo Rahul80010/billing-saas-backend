@@ -29,9 +29,11 @@ app.use(express.json({
 }));
 
 // Static uploads serving
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/public/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 // Routes
+app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/variants', require('./routes/variantRoutes'));

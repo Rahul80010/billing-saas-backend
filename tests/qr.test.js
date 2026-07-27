@@ -22,7 +22,8 @@ beforeAll(async () => {
     .send({
       name: 'UPI Merchant',
       email: 'merchant@upi.com',
-      password: 'password123'
+      password: 'password123',
+      businessPhone: '9876543210'
     });
 
   const User = mongoose.model('User');

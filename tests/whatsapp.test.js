@@ -29,7 +29,8 @@ beforeAll(async () => {
     .send({
       name: 'WhatsApp User',
       email: 'whatsapp@example.com',
-      password: 'password123'
+      password: 'password123',
+      businessPhone: '9876543210'
     });
 
   const User = mongoose.model('User');

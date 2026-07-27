@@ -1,5 +1,6 @@
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
+const { deleteImageFromStorage } = require('../services/storageService');
 
 // @desc    Get all products (with populated variants & live recalculated stats)
 // @route   GET /api/products
@@ -275,7 +276,18 @@ const deleteProduct = async (req, res) => {
     const product = await Product.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (product) {
-      // Also delete associated variants
+      // Delete cloud storage files for variants & main product
+      const variants = await ProductVariant.find({ productId: product._id });
+      for (const v of variants) {
+        if (v.image) {
+          await deleteImageFromStorage(v.image);
+        }
+      }
+      if (product.image) {
+        await deleteImageFromStorage(product.image);
+      }
+
+      // Delete database records
       await ProductVariant.deleteMany({ productId: product._id });
       await product.deleteOne();
       res.json({ message: 'Product removed' });

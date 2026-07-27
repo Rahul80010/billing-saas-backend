@@ -49,7 +49,7 @@ const productVariantSchema = new mongoose.Schema({
     min: 0,
   },
   image: {
-    type: String,
+    type: mongoose.Schema.Types.Mixed,
     default: '',
   },
   status: {

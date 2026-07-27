@@ -1,5 +1,6 @@
 const ProductVariant = require('../models/ProductVariant');
 const Product = require('../models/Product');
+const { deleteImageFromStorage } = require('../services/storageService');
 
 // @desc    Get variants (for a product or all user variants)
 // @route   GET /api/variants
@@ -241,13 +242,15 @@ const updateVariant = async (req, res) => {
 const deleteVariant = async (req, res) => {
   try {
     const variant = await ProductVariant.findOne({ _id: req.params.id, userId: req.user._id });
-    if (!variant) {
-      return res.status(404).json({ message: 'Variant not found' });
+    if (variant) {
+      if (variant.image) {
+        await deleteImageFromStorage(variant.image);
+      }
+      const pid = variant.productId;
+      await variant.deleteOne();
+      await updateParentProductStats(pid);
+      res.json({ message: 'Variant deleted' });
     }
-    const pid = variant.productId;
-    await variant.deleteOne();
-    await updateParentProductStats(pid);
-    res.json({ message: 'Variant deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

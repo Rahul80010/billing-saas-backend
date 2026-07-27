@@ -23,7 +23,8 @@ beforeAll(async () => {
     .send({
       name: 'User A',
       email: 'usera@example.com',
-      password: 'password123'
+      password: 'password123',
+      businessPhone: '9876543210'
     });
 
   const User = mongoose.model('User');
@@ -42,7 +43,8 @@ beforeAll(async () => {
     .send({
       name: 'User B',
       email: 'userb@example.com',
-      password: 'password123'
+      password: 'password123',
+      businessPhone: '9876543211'
     });
 
   const user2 = await User.findOne({ email: 'userb@example.com' });
