@@ -168,6 +168,10 @@ const userSchema = new mongoose.Schema({
     enum: ['pcs', 'kg'],
     default: 'pcs',
   },
+  enableMohuriAi: {
+    type: Boolean,
+    default: true,
+  },
   isAdmin: {
     type: Boolean,
     default: false,
