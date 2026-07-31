@@ -1,6 +1,50 @@
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
-const { deleteImageFromStorage } = require('../services/storageService');
+const axios = require('axios');
+const { 
+  uploadBufferToStorage, 
+  deleteImageFromStorage, 
+  generateUuidFilename, 
+  getTenantKeyPath 
+} = require('../services/storageService');
+
+/**
+ * Helper to download external Image URL and convert to Mohuri Cloud WebP URL
+ */
+const processExternalImageUrl = async (userId, imageUrl, folder = 'products') => {
+  if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) return imageUrl;
+  
+  const publicCdn = process.env.R2_PUBLIC_DOMAIN || '';
+  if (publicCdn && imageUrl.startsWith(publicCdn)) return imageUrl;
+
+  try {
+    const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 8000 });
+    const buffer = Buffer.from(response.data);
+    const mimeType = response.headers['content-type'] || 'image/webp';
+
+    const uuidFile = generateUuidFilename('webp');
+    const origKey = getTenantKeyPath(userId, folder, uuidFile, false);
+    const thumbKey = getTenantKeyPath(userId, folder, uuidFile, true);
+
+    const [url, thumbnail] = await Promise.all([
+      uploadBufferToStorage(buffer, origKey, mimeType),
+      uploadBufferToStorage(buffer, thumbKey, mimeType)
+    ]);
+
+    return {
+      url,
+      thumbnail,
+      fileName: uuidFile,
+      size: buffer.length,
+      mimeType,
+      width: 800,
+      height: 800
+    };
+  } catch (err) {
+    console.error('Failed to download external image URL:', err.message);
+    return imageUrl;
+  }
+};
 
 // @desc    Get all products (with populated variants & live recalculated stats)
 // @route   GET /api/products
@@ -9,59 +53,53 @@ const getProducts = async (req, res) => {
   try {
     const products = await Product.find({ userId: req.user._id }).sort({ createdAt: -1 }).lean();
     const productIds = products.map(p => p._id);
-    const variants = await ProductVariant.find({
-      userId: req.user._id,
-      productId: { $in: productIds }
-    }).sort({ createdAt: 1 }).lean();
+    const allVariants = await ProductVariant.find({ productId: { $in: productIds } }).lean();
 
-    const variantMap = {};
-    variants.forEach(v => {
-      const pid = v.productId ? v.productId.toString() : '';
-      if (pid) {
-        if (!variantMap[pid]) variantMap[pid] = [];
-        variantMap[pid].push(v);
-      }
+    const variantsGrouped = {};
+    allVariants.forEach(v => {
+      const pid = v.productId.toString();
+      if (!variantsGrouped[pid]) variantsGrouped[pid] = [];
+      variantsGrouped[pid].push(v);
     });
 
-    const productsWithVariants = products.map(p => {
-      const pVariants = variantMap[p._id.toString()] || [];
-      let minPrice = p.price;
-      let minBuyingCost = p.buyingCost || 0;
-      let totalStock = p.stock || 0;
-
+    const populatedProducts = products.map(p => {
+      const pVariants = variantsGrouped[p._id.toString()] || [];
       if (pVariants.length > 0) {
-        minPrice = Math.min(...pVariants.map(v => v.price));
-        minBuyingCost = Math.min(...pVariants.map(v => v.buyingCost || 0));
-        totalStock = pVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
+        const minPrice = Math.min(...pVariants.map(v => v.price));
+        const minBuyingCost = Math.min(...pVariants.map(v => v.buyingCost || 0));
+        const totalStock = pVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
+        return {
+          ...p,
+          price: minPrice,
+          buyingCost: minBuyingCost,
+          stock: totalStock,
+          variants: pVariants
+        };
       }
-
       return {
         ...p,
-        price: pVariants.length > 0 ? minPrice : p.price,
-        buyingCost: pVariants.length > 0 ? minBuyingCost : p.buyingCost,
-        stock: pVariants.length > 0 ? totalStock : p.stock,
-        variants: pVariants
+        variants: []
       };
     });
 
-    res.json(productsWithVariants);
+    res.json(populatedProducts);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Create a product (with embedded variants support)
+// @desc    Create a product (with embedded variants & image processing support)
 // @route   POST /api/products
 // @access  Private
 const createProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, image, variants } = req.body;
-
   try {
+    let { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, image, images, variants } = req.body;
+
     if (!name || !name.trim()) {
       return res.status(400).json({ message: 'Product name is required' });
     }
 
-    // Check duplicate product name (case-insensitive) for this user
+    // Check duplicate Product Name
     const existingName = await Product.findOne({
       userId: req.user._id,
       name: { $regex: new RegExp(`^${name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
@@ -71,7 +109,7 @@ const createProduct = async (req, res) => {
       return res.status(400).json({ message: `Product "${name.trim()}" is already added! (Yeh product pehle se added hai)` });
     }
 
-    // Check duplicate barcode if provided
+    // Check duplicate Barcode if provided
     if (barcode && barcode.trim()) {
       const existingBarcode = await Product.findOne({
         userId: req.user._id,
@@ -93,6 +131,11 @@ const createProduct = async (req, res) => {
       }
     }
 
+    // Download external image URL if CSV imported
+    if (typeof image === 'string' && image.startsWith('http')) {
+      image = await processExternalImageUrl(req.user._id, image, 'products');
+    }
+
     const product = new Product({
       userId: req.user._id,
       name: name.trim(),
@@ -108,16 +151,21 @@ const createProduct = async (req, res) => {
       lowStockAlert: (lowStockAlert === undefined || lowStockAlert === null || lowStockAlert === '') ? 5 : Number(lowStockAlert),
       lowStockAlertEnabled: lowStockAlertEnabled !== undefined ? Boolean(lowStockAlertEnabled) : true,
       description: description !== undefined ? description.trim() : '',
-      image: image !== undefined ? image.trim() : '',
+      image: image !== undefined ? image : '',
+      images: Array.isArray(images) ? images : [],
     });
 
     const createdProduct = await product.save();
 
-    // If embedded variants array passed (e.g. from Mobile App)
+    // If embedded variants array passed
     let createdVariants = [];
     if (Array.isArray(variants) && variants.length > 0) {
       for (const v of variants) {
         if (v.variantName && v.price !== undefined) {
+          let varImg = v.image;
+          if (typeof varImg === 'string' && varImg.startsWith('http')) {
+            varImg = await processExternalImageUrl(req.user._id, varImg, 'variants');
+          }
           const newVar = new ProductVariant({
             productId: createdProduct._id,
             userId: req.user._id,
@@ -128,7 +176,7 @@ const createProduct = async (req, res) => {
             buyingCost: v.buyingCost !== undefined && v.buyingCost !== '' ? Number(v.buyingCost) : 0,
             stock: v.stock !== undefined && v.stock !== '' ? Number(v.stock) : 0,
             lowStockAlert: v.lowStockAlert !== undefined && v.lowStockAlert !== '' ? Number(v.lowStockAlert) : 5,
-            image: v.image ? String(v.image).trim() : '',
+            image: varImg || '',
             status: v.status || 'active',
             hsnCode: v.hsnCode ? String(v.hsnCode).trim() : (createdProduct.hsnCode || '')
           });
@@ -157,16 +205,12 @@ const createProduct = async (req, res) => {
   }
 };
 
-// @desc    Update a product (with embedded variants support)
+// @desc    Update a product (with embedded variants & cloud image cleanup)
 // @route   PUT /api/products/:id
 // @access  Private
 const updateProduct = async (req, res) => {
-  const { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, image, variants } = req.body;
-
   try {
-    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
+    let { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, image, images, variants } = req.body;
     const product = await Product.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (product) {
@@ -177,7 +221,7 @@ const updateProduct = async (req, res) => {
           _id: { $ne: product._id }
         });
         if (existingName) {
-          return res.status(400).json({ message: `Product "${name.trim()}" is already added! (Yeh product pehle se added hai)` });
+          return res.status(400).json({ message: `Product "${name.trim()}" is already added!` });
         }
       }
 
@@ -203,6 +247,15 @@ const updateProduct = async (req, res) => {
         }
       }
 
+      // If image is being replaced, purge old image from cloud
+      if (image !== undefined && image !== product.image && product.image) {
+        await deleteImageFromStorage(product.image);
+      }
+
+      if (typeof image === 'string' && image.startsWith('http')) {
+        image = await processExternalImageUrl(req.user._id, image, 'products');
+      }
+
       product.name = name !== undefined ? name.trim() : product.name;
       product.price = price !== undefined ? Number(price) : product.price;
       product.gst = (gst === undefined || gst === null || gst === '') ? 0 : Number(gst);
@@ -216,7 +269,8 @@ const updateProduct = async (req, res) => {
       if (lowStockAlert !== undefined && lowStockAlert !== null && lowStockAlert !== '') product.lowStockAlert = Number(lowStockAlert);
       if (lowStockAlertEnabled !== undefined) product.lowStockAlertEnabled = Boolean(lowStockAlertEnabled);
       if (description !== undefined) product.description = description.trim();
-      if (image !== undefined) product.image = image.trim();
+      if (image !== undefined) product.image = image;
+      if (images !== undefined && Array.isArray(images)) product.images = images;
 
       // If variants array passed
       if (Array.isArray(variants)) {
@@ -265,7 +319,7 @@ const updateProduct = async (req, res) => {
   }
 };
 
-// @desc    Delete a product
+// @desc    Delete a product and purge all associated cloud storage images
 // @route   DELETE /api/products/:id
 // @access  Private
 const deleteProduct = async (req, res) => {
@@ -286,14 +340,52 @@ const deleteProduct = async (req, res) => {
       if (product.image) {
         await deleteImageFromStorage(product.image);
       }
+      if (Array.isArray(product.images)) {
+        await deleteImageFromStorage(product.images);
+      }
 
       // Delete database records
       await ProductVariant.deleteMany({ productId: product._id });
       await product.deleteOne();
-      res.json({ message: 'Product removed' });
+      res.json({ message: 'Product and associated cloud images removed' });
     } else {
       res.status(404).json({ message: 'Product not found' });
     }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Bulk Delete products and purge all cloud storage images
+// @route   POST /api/products/bulk-delete
+// @access  Private
+const bulkDeleteProducts = async (req, res) => {
+  try {
+    const { productIds } = req.body;
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ message: 'No product IDs provided for deletion.' });
+    }
+
+    const products = await Product.find({ _id: { $in: productIds }, userId: req.user._id });
+
+    for (const p of products) {
+      const variants = await ProductVariant.find({ productId: p._id });
+      for (const v of variants) {
+        if (v.image) {
+          await deleteImageFromStorage(v.image);
+        }
+      }
+      if (p.image) {
+        await deleteImageFromStorage(p.image);
+      }
+      if (Array.isArray(p.images)) {
+        await deleteImageFromStorage(p.images);
+      }
+      await ProductVariant.deleteMany({ productId: p._id });
+      await p.deleteOne();
+    }
+
+    res.json({ message: `Successfully deleted ${products.length} products and purged cloud images.` });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -304,4 +396,5 @@ module.exports = {
   createProduct,
   updateProduct,
   deleteProduct,
+  bulkDeleteProducts,
 };

@@ -221,7 +221,13 @@ const updateVariant = async (req, res) => {
     if (buyingCost !== undefined && buyingCost !== '') variant.buyingCost = Number(buyingCost);
     if (stock !== undefined && stock !== '') variant.stock = Number(stock);
     if (lowStockAlert !== undefined && lowStockAlert !== '') variant.lowStockAlert = Number(lowStockAlert);
-    if (image !== undefined) variant.image = image;
+    if (image !== undefined) {
+      // Purge old variant image from cloud if being replaced
+      if (image !== variant.image && variant.image) {
+        await deleteImageFromStorage(variant.image);
+      }
+      variant.image = image;
+    }
     if (status !== undefined) variant.status = status;
     if (hsnCode !== undefined) variant.hsnCode = hsnCode.trim();
 

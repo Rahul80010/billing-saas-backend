@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 // Initialize S3Client for Cloudflare R2 / AWS S3 if credentials exist
@@ -41,18 +42,41 @@ const getPublicCdnDomain = () => {
 };
 
 /**
+ * Generate secure UUID collision-free filename
+ */
+const generateUuidFilename = (extension = 'webp') => {
+  const uuid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${uuid}.${extension}`;
+};
+
+/**
+ * Build tenant-isolated key path
+ * Example: tenant_664a123/products/5f7c3a11-b9dd-4fa7-a2db.webp
+ */
+const getTenantKeyPath = (tenantId, folder = 'products', filename = '', isThumb = false) => {
+  const cleanTenant = (tenantId || 'global').toString().replace(/[^a-zA-Z0-9_-]/g, '');
+  const cleanFolder = (folder || 'products').toString().replace(/[^a-zA-Z0-9_-]/g, '');
+  const finalFile = filename || generateUuidFilename('webp');
+
+  if (isThumb) {
+    return `tenant_${cleanTenant}/${cleanFolder}/thumb/${finalFile}`;
+  }
+  return `tenant_${cleanTenant}/${cleanFolder}/${finalFile}`;
+};
+
+/**
  * Upload a WebP buffer to Cloudflare R2 / S3 or Local Fallback
  * @param {Buffer} buffer - WebP binary image buffer
- * @param {string} keyPath - Object key path (e.g., 'products/iphone15_1785.webp' or 'products/thumb/iphone15_1785.webp')
+ * @param {string} keyPath - Object key path (e.g. tenant_123/products/uuid.webp)
  * @param {string} mimeType - Content MIME type (default 'image/webp')
- * @returns {Promise<string>} Public URL of uploaded image
+ * @returns {Promise<string>} Public CDN URL of uploaded image
  */
 const uploadBufferToStorage = async (buffer, keyPath, mimeType = 'image/webp') => {
   const s3Client = getS3Client();
   const bucketName = getBucketName();
 
   if (s3Client && bucketName) {
-    // Upload to Cloudflare R2 / S3
+    // Upload to Cloudflare R2 / S3 with CDN Caching Header
     const command = new PutObjectCommand({
       Bucket: bucketName,
       Key: keyPath,
@@ -92,25 +116,46 @@ const uploadBufferToStorage = async (buffer, keyPath, mimeType = 'image/webp') =
 const deleteImageFromStorage = async (imageField) => {
   if (!imageField) return;
 
-  const url = typeof imageField === 'object' ? imageField.url : imageField;
-  const thumbUrl = typeof imageField === 'object' ? imageField.thumbnail : '';
-
-  if (!url || typeof url !== 'string' || url.startsWith('data:')) return;
-
-  const deleteKey = (targetUrl) => {
-    if (!targetUrl || typeof targetUrl !== 'string') return null;
-    try {
-      if (targetUrl.includes('/uploads/')) {
-        return targetUrl.split('/uploads/')[1];
-      }
-      const parsed = new URL(targetUrl);
-      return parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname;
-    } catch (_) {
-      return null;
-    }
+  const extractUrl = (item) => {
+    if (!item) return '';
+    if (typeof item === 'string') return item;
+    if (typeof item === 'object') return item.url || item.thumbnail || '';
+    return '';
   };
 
-  const keysToDelete = [deleteKey(url), deleteKey(thumbUrl)].filter(Boolean);
+  const extractThumbUrl = (item) => {
+    if (typeof item === 'object' && item.thumbnail) return item.thumbnail;
+    return '';
+  };
+
+  // Support array of images or single image
+  const targets = Array.isArray(imageField) ? imageField : [imageField];
+
+  const keysToDelete = [];
+
+  for (const tgt of targets) {
+    const url = extractUrl(tgt);
+    const thumbUrl = extractThumbUrl(tgt);
+
+    const parseKey = (targetUrl) => {
+      if (!targetUrl || typeof targetUrl !== 'string' || targetUrl.startsWith('data:')) return null;
+      try {
+        if (targetUrl.includes('/uploads/')) {
+          return targetUrl.split('/uploads/')[1];
+        }
+        const parsed = new URL(targetUrl);
+        return parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname;
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const k1 = parseKey(url);
+    const k2 = parseKey(thumbUrl);
+
+    if (k1) keysToDelete.push(k1);
+    if (k2 && k2 !== k1) keysToDelete.push(k2);
+  }
 
   const s3Client = getS3Client();
   const bucketName = getBucketName();
@@ -139,4 +184,6 @@ module.exports = {
   uploadBufferToStorage,
   deleteImageFromStorage,
   getPublicCdnDomain,
+  generateUuidFilename,
+  getTenantKeyPath,
 };

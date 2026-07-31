@@ -74,6 +74,10 @@ const productSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: '',
   },
+  images: {
+    type: [mongoose.Schema.Types.Mixed],
+    default: [],
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', productSchema);

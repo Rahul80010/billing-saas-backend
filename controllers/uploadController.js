@@ -1,6 +1,12 @@
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
-const { uploadBufferToStorage, deleteImageFromStorage } = require('../services/storageService');
+const ImageAuditLog = require('../models/ImageAuditLog');
+const { 
+  uploadBufferToStorage, 
+  deleteImageFromStorage, 
+  generateUuidFilename, 
+  getTenantKeyPath 
+} = require('../services/storageService');
 
 /**
  * Helper to parse Base64 string to Buffer
@@ -25,27 +31,14 @@ const parseBase64Image = (base64Str) => {
 };
 
 /**
- * Create collision-free unique filename
- */
-const generateUniqueFilename = (originalName = 'image', extension = 'webp') => {
-  const cleanName = originalName
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '_')
-    .replace(/_+/g, '_')
-    .slice(0, 30);
-  const randomSuffix = Math.random().toString(36).substring(2, 8);
-  const timestamp = Date.now();
-  return `${cleanName}_${timestamp}_${randomSuffix}.${extension}`;
-};
-
-/**
- * @desc    Upload Single/Variant Product Image (Base64 or Binary Buffer)
+ * @desc    Upload Single/Variant Image (with automated WebP, tenant R2 path, UUID naming, and old image purging)
  * @route   POST /api/upload/image
  * @access  Private
  */
 const uploadImage = async (req, res) => {
   try {
-    const { image, thumbnailImage, fileName, folder = 'products', width, height } = req.body;
+    const userId = req.user._id;
+    const { image, thumbnailImage, oldImage, folder = 'products', width, height } = req.body;
 
     if (!image) {
       return res.status(400).json({ message: 'No image data provided.' });
@@ -63,7 +56,7 @@ const uploadImage = async (req, res) => {
       origBuffer = parsed.buffer;
     } else {
       // It's already a URL
-      return res.json({ url: image, thumbnail: image, fileName: fileName || 'image.webp' });
+      return res.json({ url: image, thumbnail: image, fileName: 'image.webp' });
     }
 
     // Check size limit (10MB max)
@@ -71,7 +64,7 @@ const uploadImage = async (req, res) => {
       return res.status(400).json({ message: 'Image size exceeds maximum 10MB limit.' });
     }
 
-    // 2. Process thumbnail image buffer (if provided separately, otherwise reuse origBuffer)
+    // 2. Process thumbnail image buffer
     let thumbBuffer = origBuffer;
     if (thumbnailImage && (thumbnailImage.startsWith('data:') || !thumbnailImage.startsWith('http'))) {
       const parsedThumb = parseBase64Image(thumbnailImage);
@@ -80,27 +73,49 @@ const uploadImage = async (req, res) => {
       }
     }
 
-    // 3. Generate unique filenames & keys
-    const uniqueFileName = generateUniqueFilename(fileName || 'prod');
-    const origKey = `${folder}/${uniqueFileName}`;
-    const thumbKey = `${folder}/thumb/${uniqueFileName}`;
+    // 3. Generate secure UUID filename & tenant R2 key paths
+    const uuidFile = generateUuidFilename('webp');
+    const origKey = getTenantKeyPath(userId, folder, uuidFile, false);
+    const thumbKey = getTenantKeyPath(userId, folder, uuidFile, true);
 
-    // 4. Upload both files to Cloudflare R2 / S3 Storage
+    // 4. If oldImage provided, purge old cloud image first
+    if (oldImage) {
+      try {
+        await deleteImageFromStorage(oldImage);
+      } catch (purgeErr) {
+        console.error('Failed to purge old image on replace:', purgeErr.message);
+      }
+    }
+
+    // 5. Upload original + thumbnail to Cloudflare R2 / S3
     const [url, thumbnail] = await Promise.all([
       uploadBufferToStorage(origBuffer, origKey, mimeType),
       uploadBufferToStorage(thumbBuffer, thumbKey, mimeType)
     ]);
 
-    // 5. Construct metadata response
+    // 6. Construct metadata response
     const metadata = {
       url,
       thumbnail: thumbnail || url,
-      fileName: uniqueFileName,
+      fileName: uuidFile,
       size: origBuffer.length,
       mimeType,
       width: width || 800,
       height: height || 800
     };
+
+    // 7. Audit Log Entry
+    try {
+      await ImageAuditLog.create({
+        userId,
+        action: oldImage ? 'REPLACE' : 'UPLOAD',
+        imageKey: origKey,
+        fileSize: origBuffer.length,
+        mimeType,
+        ip: req.ip || req.headers['x-forwarded-for'] || '',
+        details: `Uploaded image to folder ${folder}`
+      });
+    } catch (_) {}
 
     res.status(201).json(metadata);
   } catch (error) {
@@ -116,12 +131,24 @@ const uploadImage = async (req, res) => {
  */
 const deleteImage = async (req, res) => {
   try {
+    const userId = req.user._id;
     const { image } = req.body;
     if (!image) {
       return res.status(400).json({ message: 'No image target provided.' });
     }
 
     await deleteImageFromStorage(image);
+
+    try {
+      await ImageAuditLog.create({
+        userId,
+        action: 'DELETE',
+        imageKey: typeof image === 'object' ? image.url : image,
+        ip: req.ip || '',
+        details: 'Deleted image from Cloudflare R2'
+      });
+    } catch (_) {}
+
     res.json({ message: 'Image successfully deleted from cloud storage.' });
   } catch (error) {
     console.error('Failed to delete image:', error);
@@ -130,9 +157,80 @@ const deleteImage = async (req, res) => {
 };
 
 /**
- * @desc    Safe, Resumable Migration Tool: Converts legacy Base64 MongoDB images to Cloud URLs
- * @route   POST /api/products/migrate-images
+ * @desc    Get Image Storage Dashboard Analytics
+ * @route   GET /api/upload/stats
  * @access  Private
+ */
+const getStorageStats = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const products = await Product.find({ userId }).lean();
+    const variants = await ProductVariant.find({ userId }).lean();
+
+    let totalImages = 0;
+    let totalSizeBytes = 0;
+    let productImagesCount = 0;
+    let variantImagesCount = 0;
+    let base64Products = 0;
+    let base64Variants = 0;
+
+    products.forEach(p => {
+      if (p.image) {
+        totalImages++;
+        productImagesCount++;
+        if (typeof p.image === 'string' && p.image.startsWith('data:image')) {
+          base64Products++;
+        } else if (typeof p.image === 'object' && p.image.size) {
+          totalSizeBytes += p.image.size;
+        }
+      }
+      if (Array.isArray(p.images)) {
+        p.images.forEach(img => {
+          totalImages++;
+          productImagesCount++;
+          if (typeof img === 'object' && img.size) {
+            totalSizeBytes += img.size;
+          }
+        });
+      }
+    });
+
+    variants.forEach(v => {
+      if (v.image) {
+        totalImages++;
+        variantImagesCount++;
+        if (typeof v.image === 'string' && v.image.startsWith('data:image')) {
+          base64Variants++;
+        } else if (typeof v.image === 'object' && v.image.size) {
+          totalSizeBytes += v.image.size;
+        }
+      }
+    });
+
+    const recentLogs = await ImageAuditLog.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    res.json({
+      totalImages,
+      storageUsedMb: Number((totalSizeBytes / (1024 * 1024)).toFixed(2)),
+      productImagesCount,
+      variantImagesCount,
+      remainingBase64Count: base64Products + base64Variants,
+      recentAuditLogs: recentLogs
+    });
+  } catch (error) {
+    console.error('Failed to fetch storage stats:', error);
+    res.status(500).json({ message: 'Failed to fetch storage stats.', error: error.message });
+  }
+};
+
+/**
+ * @desc    Safe, Resumable Migration Tool: Converts legacy Base64 MongoDB images to Cloud URLs
+ * @route   POST /api/upload/migrate
+ * @access  Private (Admin / Tenant Owner)
  */
 const migrateBase64Images = async (req, res) => {
   try {
@@ -158,9 +256,9 @@ const migrateBase64Images = async (req, res) => {
       if (typeof prod.image === 'string' && prod.image.startsWith('data:image')) {
         const parsed = parseBase64Image(prod.image);
         if (parsed) {
-          const fileName = generateUniqueFilename(prod.name || 'product');
-          const origKey = `products/${fileName}`;
-          const thumbKey = `products/thumb/${fileName}`;
+          const uuidFile = generateUuidFilename('webp');
+          const origKey = getTenantKeyPath(userId, 'products', uuidFile, false);
+          const thumbKey = getTenantKeyPath(userId, 'products', uuidFile, true);
 
           const [url, thumbnail] = await Promise.all([
             uploadBufferToStorage(parsed.buffer, origKey, 'image/webp'),
@@ -170,7 +268,7 @@ const migrateBase64Images = async (req, res) => {
           prod.image = {
             url,
             thumbnail,
-            fileName,
+            fileName: uuidFile,
             size: parsed.buffer.length,
             mimeType: 'image/webp',
             width: 800,
@@ -188,9 +286,9 @@ const migrateBase64Images = async (req, res) => {
       if (typeof varItem.image === 'string' && varItem.image.startsWith('data:image')) {
         const parsed = parseBase64Image(varItem.image);
         if (parsed) {
-          const fileName = generateUniqueFilename(varItem.variantName || 'variant');
-          const origKey = `variants/${fileName}`;
-          const thumbKey = `variants/thumb/${fileName}`;
+          const uuidFile = generateUuidFilename('webp');
+          const origKey = getTenantKeyPath(userId, 'variants', uuidFile, false);
+          const thumbKey = getTenantKeyPath(userId, 'variants', uuidFile, true);
 
           const [url, thumbnail] = await Promise.all([
             uploadBufferToStorage(parsed.buffer, origKey, 'image/webp'),
@@ -200,7 +298,7 @@ const migrateBase64Images = async (req, res) => {
           varItem.image = {
             url,
             thumbnail,
-            fileName,
+            fileName: uuidFile,
             size: parsed.buffer.length,
             mimeType: 'image/webp',
             width: 800,
@@ -213,11 +311,19 @@ const migrateBase64Images = async (req, res) => {
       }
     }
 
+    try {
+      await ImageAuditLog.create({
+        userId,
+        action: 'MIGRATE',
+        details: `Migrated ${migratedProducts} products and ${migratedVariants} variants to Cloud Storage`
+      });
+    } catch (_) {}
+
     res.json({
       message: 'Base64 image migration completed successfully.',
       migratedProducts,
       migratedVariants,
-      totalRemainingBase64: (products.length - migratedProducts) + (variants.length - migratedVariants)
+      remainingBase64Count: (products.length - migratedProducts) + (variants.length - migratedVariants)
     });
   } catch (error) {
     console.error('Failed to run base64 image migration:', error);
@@ -228,5 +334,6 @@ const migrateBase64Images = async (req, res) => {
 module.exports = {
   uploadImage,
   deleteImage,
+  getStorageStats,
   migrateBase64Images
 };

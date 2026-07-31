@@ -54,6 +54,12 @@ app.get('/', (req, res) => {
   res.send('Billing SaaS API is running...');
 });
 
+// Global Error Handler Middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled Error in Route:', err);
+  res.status(500).json({ message: 'Internal Server Error', error: err.message });
+});
+
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== 'test') {
@@ -61,5 +67,16 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`Server running on port ${PORT}`);
   });
 }
+
+// Catch uncaught exceptions to prevent server from crashing entirely
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION! Shutting down gracefully if needed...', err);
+  // Optional: process.exit(1) after logging
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION! Shutting down gracefully if needed...', err);
+  // Optional: process.exit(1) after logging
+});
 
 module.exports = app;
