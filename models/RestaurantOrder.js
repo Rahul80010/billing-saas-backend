@@ -8,7 +8,7 @@ const orderItemSchema = new mongoose.Schema({
   },
   variant: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Variant',
+    ref: 'ProductVariant',
     required: false,
   },
   quantity: {

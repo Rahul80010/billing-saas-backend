@@ -1,6 +1,7 @@
 const RestaurantTable = require('../models/RestaurantTable');
 const RestaurantOrder = require('../models/RestaurantOrder');
 const Product = require('../models/Product');
+const ProductVariant = require('../models/ProductVariant');
 const User = require('../models/User');
 const { getIO } = require('../services/socketService');
 
@@ -99,7 +100,35 @@ exports.getPublicMenu = async (req, res) => {
       return res.status(404).json({ message: 'Table not found' });
     }
 
-    const products = await Product.find({ user: tenantId }).populate('variants');
+    const products = await Product.find({ userId: tenantId }).lean();
+    const productIds = products.map(p => p._id);
+    const allVariants = await ProductVariant.find({ productId: { $in: productIds } }).lean();
+
+    const variantsGrouped = {};
+    allVariants.forEach(v => {
+      const pid = v.productId.toString();
+      if (!variantsGrouped[pid]) variantsGrouped[pid] = [];
+      variantsGrouped[pid].push(v);
+    });
+
+    const populatedProducts = products.map(p => {
+      const pVariants = variantsGrouped[p._id.toString()] || [];
+      if (pVariants.length > 0) {
+        const minPrice = Math.min(...pVariants.map(v => v.price));
+        return {
+          ...p,
+          sellingPrice: minPrice, // Maps to sellingPrice expected by frontend
+          imageUrl: p.image || (p.images && p.images[0]) || null,
+          variants: pVariants
+        };
+      }
+      return {
+        ...p,
+        sellingPrice: p.price,
+        imageUrl: p.image || (p.images && p.images[0]) || null,
+        variants: []
+      };
+    });
     
     res.json({
       restaurant: {
@@ -111,7 +140,7 @@ exports.getPublicMenu = async (req, res) => {
         name: table.tableName,
         number: table.tableNumber
       },
-      menu: products
+      menu: populatedProducts
     });
   } catch (error) {
     console.error(error);
