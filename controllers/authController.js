@@ -312,7 +312,8 @@ const updateProfile = async (req, res) => {
     bankIfsc,
     bankAccountName,
     panNumber,
-    enableImei
+    enableImei,
+    enableRestaurantMode
   } = req.body;
 
   try {
@@ -353,6 +354,7 @@ const updateProfile = async (req, res) => {
       user.bankAccountName = bankAccountName !== undefined ? bankAccountName : user.bankAccountName;
       user.panNumber = panNumber !== undefined ? panNumber : user.panNumber;
       user.enableImei = enableImei !== undefined ? enableImei : user.enableImei;
+      user.enableRestaurantMode = enableRestaurantMode !== undefined ? enableRestaurantMode : user.enableRestaurantMode;
 
       const updatedUser = await user.save();
       res.json({
@@ -387,7 +389,8 @@ const updateProfile = async (req, res) => {
         bankIfsc: updatedUser.bankIfsc,
         bankAccountName: updatedUser.bankAccountName,
         panNumber: updatedUser.panNumber,
-        enableImei: updatedUser.enableImei
+        enableImei: updatedUser.enableImei,
+        enableRestaurantMode: updatedUser.enableRestaurantMode
       });
     } else {
       res.status(404).json({ message: 'User not found' });
