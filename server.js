@@ -8,6 +8,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const path = require('path');
+const http = require('http');
 
 // Load env vars
 dotenv.config();
@@ -18,6 +19,10 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 const app = express();
+const server = http.createServer(app);
+
+// Init Socket.io
+require('./services/socketService').init(server);
 
 // Middleware
 app.use(cors());
@@ -48,6 +53,7 @@ app.use('/api/image-generations', require('./routes/imageGenerationRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
+app.use('/api/restaurant', require('./routes/restaurantRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {
@@ -63,7 +69,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 }

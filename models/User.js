@@ -172,6 +172,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  enableRestaurantMode: {
+    type: Boolean,
+    default: false,
+  },
   isAdmin: {
     type: Boolean,
     default: false,
