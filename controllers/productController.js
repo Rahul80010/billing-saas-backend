@@ -8,6 +8,8 @@ const {
   getTenantKeyPath 
 } = require('../services/storageService');
 
+const { fetchImageBufferFromAnyUrl } = require('./uploadController');
+
 /**
  * Helper to download external Image URL and convert to Mohuri Cloud WebP URL
  */
@@ -18,9 +20,7 @@ const processExternalImageUrl = async (userId, imageUrl, folder = 'products') =>
   if (publicCdn && imageUrl.startsWith(publicCdn)) return imageUrl;
 
   try {
-    const response = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 8000 });
-    const buffer = Buffer.from(response.data);
-    const mimeType = response.headers['content-type'] || 'image/webp';
+    const { buffer, mimeType } = await fetchImageBufferFromAnyUrl(imageUrl);
 
     const uuidFile = generateUuidFilename('webp');
     const origKey = getTenantKeyPath(userId, folder, uuidFile, false);

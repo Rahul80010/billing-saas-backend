@@ -504,5 +504,6 @@ module.exports = {
   uploadImageFromUrl,
   deleteImage,
   getStorageStats,
-  migrateBase64Images
+  migrateBase64Images,
+  fetchImageBufferFromAnyUrl
 };
