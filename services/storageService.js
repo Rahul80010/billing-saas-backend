@@ -76,23 +76,29 @@ const uploadBufferToStorage = async (buffer, keyPath, mimeType = 'image/webp') =
   const bucketName = getBucketName();
 
   if (s3Client && bucketName) {
-    // Upload to Cloudflare R2 / S3 with CDN Caching Header
-    const command = new PutObjectCommand({
-      Bucket: bucketName,
-      Key: keyPath,
-      Body: buffer,
-      ContentType: mimeType,
-      CacheControl: 'public, max-age=31536000, immutable',
-    });
+    try {
+      // Upload to Cloudflare R2 / S3 with CDN Caching Header
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: keyPath,
+        Body: buffer,
+        ContentType: mimeType,
+        CacheControl: 'public, max-age=31536000, immutable',
+      });
 
-    await s3Client.send(command);
+      await s3Client.send(command);
 
-    const cdnDomain = getPublicCdnDomain();
-    if (cdnDomain) {
-      return `${cdnDomain}/${keyPath}`;
+      const cdnDomain = getPublicCdnDomain();
+      if (cdnDomain) {
+        return `${cdnDomain}/${keyPath}`;
+      }
+      return `https://${bucketName}.r2.cloudflarestorage.com/${keyPath}`;
+    } catch (s3Error) {
+      console.error('❌ Cloudflare R2 Upload Command Failed:', s3Error.message);
+      throw new Error(`Cloudflare R2 Storage Error: ${s3Error.message}`);
     }
-    return `https://${bucketName}.r2.cloudflarestorage.com/${keyPath}`;
   } else {
+    console.warn('⚠️ Cloudflare R2 credentials missing in environment! Falling back to local disk storage.');
     // Fallback to local server disk storage
     const uploadsDir = path.join(__dirname, '..', 'uploads');
     const targetFile = path.join(uploadsDir, keyPath);
@@ -104,7 +110,7 @@ const uploadBufferToStorage = async (buffer, keyPath, mimeType = 'image/webp') =
 
     fs.writeFileSync(targetFile, buffer);
 
-    const serverDomain = process.env.SERVER_URL || 'http://localhost:5000';
+    const serverDomain = process.env.SERVER_URL || process.env.PUBLIC_SERVER_URL || 'http://localhost:5000';
     return `${serverDomain}/uploads/${keyPath.replace(/\\/g, '/')}`;
   }
 };

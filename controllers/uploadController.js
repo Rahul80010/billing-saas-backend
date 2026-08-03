@@ -55,6 +55,9 @@ const uploadImage = async (req, res) => {
         return res.status(400).json({ message: 'Invalid image payload format.' });
       }
       origBuffer = parsed.buffer;
+      if (parsed.format) {
+        mimeType = parsed.format.startsWith('image/') ? parsed.format : `image/${parsed.format}`;
+      }
     } else {
       // It's already a URL
       return res.json({ url: image, thumbnail: image, fileName: 'image.webp' });
