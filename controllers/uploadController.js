@@ -126,6 +126,91 @@ const uploadImage = async (req, res) => {
 };
 
 /**
+ * Helper to fetch image buffer from any URL, automatically handling webpage open-graph scraping and browser user agents.
+ */
+const fetchImageBufferFromAnyUrl = async (targetUrl) => {
+  const browserHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+  };
+
+  let response;
+  try {
+    response = await axios.get(targetUrl, {
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      maxContentLength: 15 * 1024 * 1024,
+      headers: browserHeaders
+    });
+  } catch (err) {
+    throw new Error(`Could not fetch URL: ${err.message}`);
+  }
+
+  let buffer = Buffer.from(response.data);
+  const contentType = (response.headers['content-type'] || '').toLowerCase();
+
+  // Helper to check if buffer is an image by magic bytes
+  const isImageBuffer = (b) => {
+    if (!b || b.length < 4) return false;
+    // JPEG (FF D8 FF)
+    if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return true;
+    // PNG (89 50 4E 47)
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return true;
+    // WebP (RIFF....WEBP)
+    if (b.toString('utf8', 0, 4) === 'RIFF' && b.toString('utf8', 8, 12) === 'WEBP') return true;
+    // GIF (GIF87a / GIF89a)
+    if (b.toString('utf8', 0, 3) === 'GIF') return true;
+    return false;
+  };
+
+  if (contentType.startsWith('image/') || isImageBuffer(buffer)) {
+    return { buffer, mimeType: contentType.startsWith('image/') ? contentType : 'image/webp' };
+  }
+
+  // If it's a webpage HTML (e.g. Croma, Amazon, Flipkart, etc.), scrape the og:image or main image URL
+  const html = buffer.toString('utf8');
+  let extractedImageSrc = null;
+
+  // Regex patterns to find product image URL in meta tags
+  const ogMatch = html.match(/<meta\s+(?:property|name)=["'](?:og:image|twitter:image|twitter:image:src)["']\s+content=["']([^"']+)["']/i) ||
+                  html.match(/<meta\s+content=["']([^"']+)["']\s+(?:property|name)=["'](?:og:image|twitter:image|twitter:image:src)["']/i) ||
+                  html.match(/<link\s+rel=["']image_src["']\s+href=["']([^"']+)["']/i);
+
+  if (ogMatch && ogMatch[1]) {
+    extractedImageSrc = ogMatch[1].trim();
+  } else {
+    // Try finding img tag with src containing product / media
+    const imgMatch = html.match(/<img[^>]+src=["']([^"']+\.(?:png|jpg|jpeg|webp|gif)[^"']*)["']/i);
+    if (imgMatch && imgMatch[1]) {
+      extractedImageSrc = imgMatch[1].trim();
+    }
+  }
+
+  if (!extractedImageSrc) {
+    throw new Error('Webpage image not found. Please copy direct image link.');
+  }
+
+  // Resolve relative URL to absolute URL if needed
+  try {
+    extractedImageSrc = new URL(extractedImageSrc, targetUrl).href;
+  } catch (_) {}
+
+  // Now fetch the actual extracted image
+  const imgResponse = await axios.get(extractedImageSrc, {
+    responseType: 'arraybuffer',
+    timeout: 15000,
+    maxContentLength: 15 * 1024 * 1024,
+    headers: browserHeaders
+  });
+
+  const imgBuffer = Buffer.from(imgResponse.data);
+  const imgContentType = (imgResponse.headers['content-type'] || 'image/webp').toLowerCase();
+
+  return { buffer: imgBuffer, mimeType: imgContentType };
+};
+
+/**
  * @desc    Upload Image from external URL (download → WebP → R2)
  * @route   POST /api/upload/image-url
  * @access  Private
@@ -143,21 +228,8 @@ const uploadImageFromUrl = async (req, res) => {
       return res.status(400).json({ message: 'Invalid URL. Must start with http:// or https://' });
     }
 
-    // Download the image
-    const response = await axios.get(imageUrl, { 
-      responseType: 'arraybuffer', 
-      timeout: 15000,
-      maxContentLength: 10 * 1024 * 1024,
-      headers: { 'User-Agent': 'Mohuri-ImageFetcher/1.0' }
-    });
-
-    const buffer = Buffer.from(response.data);
-    const contentType = response.headers['content-type'] || 'image/webp';
-
-    // Validate it's actually an image
-    if (!contentType.startsWith('image/')) {
-      return res.status(400).json({ message: 'Yeh URL ek webpage hai, direct image nahi. Image pe right-click karke "Copy Image Address" use karo.' });
-    }
+    // Download image or scrape image from webpage URL automatically
+    const { buffer, mimeType } = await fetchImageBufferFromAnyUrl(imageUrl.trim());
 
     // Check size
     if (buffer.length > 10 * 1024 * 1024) {
@@ -216,7 +288,7 @@ const uploadImageFromUrl = async (req, res) => {
       return res.status(400).json({ message: 'Image not found at the provided URL.' });
     }
     console.error('Failed to upload image from URL:', error.message);
-    res.status(500).json({ message: 'Failed to download and upload image from URL.', error: error.message });
+    res.status(400).json({ message: error.message || 'Failed to download and upload image from URL.' });
   }
 };
 
