@@ -1,6 +1,7 @@
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 const ImageAuditLog = require('../models/ImageAuditLog');
+const axios = require('axios');
 const { 
   uploadBufferToStorage, 
   deleteImageFromStorage, 
@@ -121,6 +122,101 @@ const uploadImage = async (req, res) => {
   } catch (error) {
     console.error('Failed to upload image to cloud storage:', error);
     res.status(500).json({ message: 'Image upload failed.', error: error.message });
+  }
+};
+
+/**
+ * @desc    Upload Image from external URL (download → WebP → R2)
+ * @route   POST /api/upload/image-url
+ * @access  Private
+ */
+const uploadImageFromUrl = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { imageUrl, oldImage, folder = 'products' } = req.body;
+
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      return res.status(400).json({ message: 'No image URL provided.' });
+    }
+
+    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+      return res.status(400).json({ message: 'Invalid URL. Must start with http:// or https://' });
+    }
+
+    // Download the image
+    const response = await axios.get(imageUrl, { 
+      responseType: 'arraybuffer', 
+      timeout: 15000,
+      maxContentLength: 10 * 1024 * 1024,
+      headers: { 'User-Agent': 'Mohuri-ImageFetcher/1.0' }
+    });
+
+    const buffer = Buffer.from(response.data);
+    const contentType = response.headers['content-type'] || 'image/webp';
+
+    // Validate it's actually an image
+    if (!contentType.startsWith('image/')) {
+      return res.status(400).json({ message: 'URL does not point to a valid image file.' });
+    }
+
+    // Check size
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ message: 'Image from URL exceeds 10MB limit.' });
+    }
+
+    // Generate UUID filename & tenant R2 paths
+    const uuidFile = generateUuidFilename('webp');
+    const origKey = getTenantKeyPath(userId, folder, uuidFile, false);
+    const thumbKey = getTenantKeyPath(userId, folder, uuidFile, true);
+
+    // Purge old image if replacing
+    if (oldImage) {
+      try {
+        await deleteImageFromStorage(oldImage);
+      } catch (purgeErr) {
+        console.error('Failed to purge old image on URL replace:', purgeErr.message);
+      }
+    }
+
+    // Upload original + thumbnail to R2
+    const [url, thumbnail] = await Promise.all([
+      uploadBufferToStorage(buffer, origKey, 'image/webp'),
+      uploadBufferToStorage(buffer, thumbKey, 'image/webp')
+    ]);
+
+    const metadata = {
+      url,
+      thumbnail: thumbnail || url,
+      fileName: uuidFile,
+      size: buffer.length,
+      mimeType: 'image/webp',
+      width: 800,
+      height: 800
+    };
+
+    // Audit Log
+    try {
+      await ImageAuditLog.create({
+        userId,
+        action: oldImage ? 'REPLACE' : 'UPLOAD',
+        imageKey: origKey,
+        fileSize: buffer.length,
+        mimeType: 'image/webp',
+        ip: req.ip || req.headers['x-forwarded-for'] || '',
+        details: `Downloaded from URL and uploaded to ${folder}`
+      });
+    } catch (_) {}
+
+    res.status(201).json(metadata);
+  } catch (error) {
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      return res.status(408).json({ message: 'Image URL download timed out. Please try again.' });
+    }
+    if (error.response && error.response.status === 404) {
+      return res.status(400).json({ message: 'Image not found at the provided URL.' });
+    }
+    console.error('Failed to upload image from URL:', error.message);
+    res.status(500).json({ message: 'Failed to download and upload image from URL.', error: error.message });
   }
 };
 
@@ -333,6 +429,7 @@ const migrateBase64Images = async (req, res) => {
 
 module.exports = {
   uploadImage,
+  uploadImageFromUrl,
   deleteImage,
   getStorageStats,
   migrateBase64Images
