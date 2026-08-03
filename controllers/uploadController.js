@@ -156,7 +156,7 @@ const uploadImageFromUrl = async (req, res) => {
 
     // Validate it's actually an image
     if (!contentType.startsWith('image/')) {
-      return res.status(400).json({ message: 'URL does not point to a valid image file.' });
+      return res.status(400).json({ message: 'Yeh URL ek webpage hai, direct image nahi. Image pe right-click karke "Copy Image Address" use karo.' });
     }
 
     // Check size
