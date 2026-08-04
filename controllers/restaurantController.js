@@ -226,6 +226,10 @@ exports.updateOrderStatus = async (req, res) => {
     if (!order) return res.status(404).json({ message: 'Order not found' });
     
     order.status = status;
+    if (status === 'Preparing') order.kitchenAcceptedAt = new Date();
+    if (status === 'Ready') order.readyAt = new Date();
+    if (status === 'Completed') order.completedAt = new Date();
+    
     await order.save();
     
     const io = getIO();
@@ -247,3 +251,67 @@ exports.updateOrderStatus = async (req, res) => {
     res.status(500).json({ message: 'Server Error' });
   }
 };
+
+// ==========================================
+// WAITER CALL & REQUEST ENDPOINTS
+// ==========================================
+
+const WaiterRequest = require('../models/WaiterRequest');
+
+exports.createWaiterRequest = async (req, res) => {
+  try {
+    const { tenantId, tableId, requestType } = req.body;
+    const table = await RestaurantTable.findOne({ _id: tableId, tenantId });
+    if (!table) return res.status(404).json({ message: 'Table not found' });
+
+    const request = new WaiterRequest({
+      tenantId,
+      tableId,
+      requestType,
+      status: 'Pending',
+    });
+
+    await request.save();
+    await request.populate('tableId');
+
+    const io = getIO();
+    io.to(`tenant_${tenantId}`).emit('waiter_request_alert', request);
+
+    res.status(201).json(request);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+exports.getPendingWaiterRequests = async (req, res) => {
+  try {
+    const requests = await WaiterRequest.find({ tenantId: req.user.id, status: 'Pending' })
+      .populate('tableId')
+      .sort({ createdAt: -1 });
+    res.json(requests);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+exports.resolveWaiterRequest = async (req, res) => {
+  try {
+    const request = await WaiterRequest.findOneAndUpdate(
+      { _id: req.params.id, tenantId: req.user.id },
+      { status: 'Attended' },
+      { new: true }
+    );
+    if (!request) return res.status(404).json({ message: 'Request not found' });
+
+    const io = getIO();
+    io.to(`tenant_${req.user.id}`).emit('waiter_request_resolved', request);
+
+    res.json(request);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+

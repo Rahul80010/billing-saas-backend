@@ -42,14 +42,35 @@ const restaurantOrderSchema = new mongoose.Schema({
     required: true,
   },
   items: [orderItemSchema],
+  orderType: {
+    type: String,
+    enum: ['Dine-in', 'Takeaway', 'Delivery'],
+    default: 'Dine-in',
+  },
+  customerName: {
+    type: String,
+    default: '',
+  },
+  customerPhone: {
+    type: String,
+    default: '',
+  },
+  notes: {
+    type: String,
+    default: '',
+  },
   status: {
     type: String,
-    enum: ['Received', 'Preparing', 'Ready', 'Served', 'Completed', 'Cancelled'],
+    enum: ['Received', 'Preparing', 'Ready', 'Served', 'Completed', 'Rejected', 'Cancelled'],
     default: 'Received',
   },
   totalAmount: {
     type: Number,
     required: true,
+  },
+  serviceCharge: {
+    type: Number,
+    default: 0,
   },
   isPaid: {
     type: Boolean,
@@ -58,8 +79,11 @@ const restaurantOrderSchema = new mongoose.Schema({
   billId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Bill',
-    required: false, // Populated once final bill is generated
-  }
+    required: false,
+  },
+  kitchenAcceptedAt: Date,
+  readyAt: Date,
+  completedAt: Date,
 }, { timestamps: true });
 
 restaurantOrderSchema.index({ tenantId: 1, createdAt: -1 });

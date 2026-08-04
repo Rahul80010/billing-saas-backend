@@ -14,9 +14,21 @@ const restaurantTableSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  capacity: {
+    type: Number,
+    default: 4,
+  },
+  section: {
+    type: String,
+    default: 'Ground Floor',
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
   status: {
     type: String,
-    enum: ['Available', 'Occupied', 'Preparing', 'Served', 'WaitingForBill', 'Cleaning', 'Reserved'],
+    enum: ['Available', 'Occupied', 'Ordering', 'Preparing', 'Ready', 'Eating', 'WaitingForBill', 'Cleaning', 'Reserved'],
     default: 'Available',
   },
   qrCodeData: {

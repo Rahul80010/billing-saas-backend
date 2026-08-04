@@ -19,6 +19,10 @@ router.delete('/tables/:id', protect, restaurantController.deleteTable);
 router.get('/orders/active', protect, restaurantController.getActiveOrders);
 router.put('/orders/:id/status', protect, restaurantController.updateOrderStatus);
 
+// Waiter Call Requests
+router.get('/waiter-requests', protect, restaurantController.getPendingWaiterRequests);
+router.put('/waiter-requests/:id/resolve', protect, restaurantController.resolveWaiterRequest);
+
 // ==========================================
 // PUBLIC CUSTOMER ROUTES (No Auth Required)
 // ==========================================
@@ -27,5 +31,6 @@ router.put('/orders/:id/status', protect, restaurantController.updateOrderStatus
 router.get('/public/menu/:tenantId/:tableId', restaurantController.getPublicMenu);
 router.post('/public/order', restaurantController.placeOrder);
 router.get('/public/order/:orderId', restaurantController.getOrderStatus);
+router.post('/public/waiter-request', restaurantController.createWaiterRequest);
 
 module.exports = router;
