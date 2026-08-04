@@ -110,7 +110,10 @@ const uploadBufferToStorage = async (buffer, keyPath, mimeType = 'image/webp') =
 
     fs.writeFileSync(targetFile, buffer);
 
-    const serverDomain = process.env.SERVER_URL || process.env.PUBLIC_SERVER_URL || 'http://localhost:5000';
+    const serverDomain = process.env.SERVER_URL || 
+                         process.env.PUBLIC_SERVER_URL || 
+                         (process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : null) || 
+                         'https://billing-saas-backend-production-3119.up.railway.app';
     return `${serverDomain}/uploads/${keyPath.replace(/\\/g, '/')}`;
   }
 };
