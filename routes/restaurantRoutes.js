@@ -16,6 +16,8 @@ router.delete('/tables/:id', protect, restaurantController.deleteTable);
 // KITCHEN & BILLING ROUTES (Requires Auth)
 // ==========================================
 
+router.post('/orders', protect, restaurantController.placeOrder);
+router.get('/orders', protect, restaurantController.getActiveOrders);
 router.get('/orders/active', protect, restaurantController.getActiveOrders);
 router.put('/orders/:id/status', protect, restaurantController.updateOrderStatus);
 

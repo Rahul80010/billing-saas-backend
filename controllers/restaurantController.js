@@ -150,10 +150,33 @@ exports.getPublicMenu = async (req, res) => {
 
 exports.placeOrder = async (req, res) => {
   try {
-    const { tenantId, tableId, items, totalAmount } = req.body;
+    const tenantId = req.user ? req.user.id : req.body.tenantId;
+    const { tableId, items, customerName, customerPhone, notes, orderType } = req.body;
+
+    if (!tenantId) {
+      return res.status(400).json({ message: 'Tenant ID is required' });
+    }
 
     const table = await RestaurantTable.findOne({ _id: tableId, tenantId });
     if (!table) return res.status(404).json({ message: 'Table not found' });
+
+    // Format items to match Mongoose orderItemSchema
+    const formattedItems = (items || []).map(i => ({
+      product: i.product || i.productId,
+      variant: i.variant || i.variantId || undefined,
+      quantity: Number(i.quantity) || 1,
+      price: Number(i.price) || 0,
+      specialInstructions: i.specialInstructions || i.notes || '',
+    }));
+
+    if (formattedItems.length === 0) {
+      return res.status(400).json({ message: 'Order must contain at least 1 item' });
+    }
+
+    // Calculate total if not provided
+    const totalAmount = req.body.totalAmount !== undefined 
+      ? Number(req.body.totalAmount) 
+      : formattedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
     // Generate Order Number
     const count = await RestaurantOrder.countDocuments({ tenantId });
@@ -163,29 +186,33 @@ exports.placeOrder = async (req, res) => {
       tenantId,
       tableId,
       orderNumber,
-      items,
+      items: formattedItems,
+      orderType: orderType || 'Dine-in',
+      customerName: customerName || '',
+      customerPhone: customerPhone || '',
+      notes: notes || '',
       totalAmount,
       status: 'Received'
     });
 
     await order.save();
     
-    // Update table status
-    table.status = 'Occupied';
+    // Update table status to Ordering
+    table.status = 'Ordering';
     await table.save();
 
     // Populate items for frontend
     await order.populate('items.product items.variant tableId');
 
-    // Emit via WebSocket to Kitchen
+    // Emit via WebSocket to Kitchen & Tenant
     const io = getIO();
     io.to(`kitchen_${tenantId}`).emit('new_order', order);
     io.to(`tenant_${tenantId}`).emit('table_updated', table);
 
     res.status(201).json(order);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+    console.error('placeOrder error:', error);
+    res.status(500).json({ message: error.message || 'Server Error' });
   }
 };
 
