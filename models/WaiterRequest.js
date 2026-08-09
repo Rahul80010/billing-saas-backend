@@ -13,7 +13,6 @@ const waiterRequestSchema = new mongoose.Schema({
   },
   requestType: {
     type: String,
-    enum: ['Call Waiter', 'Need Water', 'Need Tissue', 'Need Spoon', 'Request Bill'],
     required: true,
   },
   status: {
