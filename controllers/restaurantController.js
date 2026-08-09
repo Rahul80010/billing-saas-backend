@@ -305,7 +305,9 @@ exports.createWaiterRequest = async (req, res) => {
     await request.populate('tableId');
 
     const io = getIO();
-    io.to(`tenant_${tenantId}`).emit('waiter_request_alert', request);
+    const strTenant = tenantId.toString();
+    io.to(`tenant_${strTenant}`).emit('waiter_request_alert', request);
+    io.emit('waiter_request_alert', request);
 
     res.status(201).json(request);
   } catch (error) {
@@ -336,7 +338,9 @@ exports.resolveWaiterRequest = async (req, res) => {
     if (!request) return res.status(404).json({ message: 'Request not found' });
 
     const io = getIO();
-    io.to(`tenant_${req.user.id}`).emit('waiter_request_resolved', request);
+    const strUser = req.user.id.toString();
+    io.to(`tenant_${strUser}`).emit('waiter_request_resolved', request);
+    io.emit('waiter_request_resolved', request);
 
     res.json(request);
   } catch (error) {
@@ -353,7 +357,9 @@ exports.resolveAllWaiterRequests = async (req, res) => {
     );
 
     const io = getIO();
-    io.to(`tenant_${req.user.id}`).emit('waiter_requests_cleared_all');
+    const strUser = req.user.id.toString();
+    io.to(`tenant_${strUser}`).emit('waiter_requests_cleared_all');
+    io.emit('waiter_requests_cleared_all');
 
     res.json({ message: 'All waiter requests marked as attended' });
   } catch (error) {
