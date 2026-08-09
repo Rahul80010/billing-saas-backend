@@ -131,6 +131,14 @@ exports.getPublicMenu = async (req, res) => {
       };
     });
     
+    // Fetch latest active order for this table if any (unpaid and not completed/cancelled)
+    const activeOrder = await RestaurantOrder.findOne({
+      tenantId,
+      tableId,
+      status: { $in: ['Received', 'Preparing', 'Ready', 'Served'] },
+      isPaid: false
+    }).sort({ createdAt: -1 }).populate('items.product items.variant tableId').lean();
+
     res.json({
       restaurant: {
         name: tenant.businessName || tenant.name,
@@ -141,7 +149,8 @@ exports.getPublicMenu = async (req, res) => {
         name: table.tableName,
         number: table.tableNumber
       },
-      menu: populatedProducts
+      menu: populatedProducts,
+      activeOrder: activeOrder || null
     });
   } catch (error) {
     console.error(error);
