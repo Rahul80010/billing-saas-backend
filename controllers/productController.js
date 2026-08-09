@@ -211,7 +211,7 @@ const createProduct = async (req, res) => {
 // @access  Private
 const updateProduct = async (req, res) => {
   try {
-    let { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, image, images, variants } = req.body;
+    let { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, foodType, image, images, variants } = req.body;
     const product = await Product.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (product) {
