@@ -131,13 +131,55 @@ exports.getPublicMenu = async (req, res) => {
       };
     });
     
-    // Fetch latest active order for this table if any (unpaid and not completed/cancelled)
-    const activeOrder = await RestaurantOrder.findOne({
+    // Fetch ALL active unpaid orders for this table (sub-orders placed across rounds)
+    const activeOrders = await RestaurantOrder.find({
       tenantId,
       tableId,
       status: { $in: ['Received', 'Preparing', 'Ready', 'Served'] },
       isPaid: false
-    }).sort({ createdAt: -1 }).populate('items.product items.variant tableId').lean();
+    }).sort({ createdAt: 1 }).populate('items.product items.variant tableId').lean();
+
+    let combinedActiveOrder = null;
+
+    if (activeOrders && activeOrders.length > 0) {
+      if (activeOrders.length === 1) {
+        combinedActiveOrder = activeOrders[0];
+      } else {
+        // Merge all active sub-orders for this table into 1 combined active order
+        const allItems = [];
+        let grandTotal = 0;
+        const orderNums = [];
+        let highestStatus = activeOrders[0].status;
+        const statusPriority = { 'Served': 4, 'Ready': 3, 'Preparing': 2, 'Received': 1 };
+
+        activeOrders.forEach(ord => {
+          orderNums.push(ord.orderNumber);
+          grandTotal += Number(ord.totalAmount || 0);
+
+          if ((statusPriority[ord.status] || 0) > (statusPriority[highestStatus] || 0)) {
+            highestStatus = ord.status;
+          }
+
+          (ord.items || []).forEach(item => {
+            allItems.push({
+              ...item,
+              parentOrderNumber: ord.orderNumber
+            });
+          });
+        });
+
+        combinedActiveOrder = {
+          _id: activeOrders[activeOrders.length - 1]._id,
+          orderNumber: orderNums.join(', '),
+          status: highestStatus,
+          totalAmount: grandTotal,
+          items: allItems,
+          createdAt: activeOrders[0].createdAt,
+          subOrdersCount: activeOrders.length,
+          allOrders: activeOrders
+        };
+      }
+    }
 
     res.json({
       restaurant: {
@@ -150,7 +192,7 @@ exports.getPublicMenu = async (req, res) => {
         number: table.tableNumber
       },
       menu: populatedProducts,
-      activeOrder: activeOrder || null
+      activeOrder: combinedActiveOrder
     });
   } catch (error) {
     console.error(error);
