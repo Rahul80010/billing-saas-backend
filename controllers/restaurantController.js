@@ -204,9 +204,10 @@ exports.placeOrder = async (req, res) => {
     // Populate items for frontend
     await order.populate('items.product items.variant tableId');
 
-    // Emit via WebSocket to Kitchen & Tenant
+    // Emit via WebSocket to Kitchen & Tenant (Waiter)
     const io = getIO();
     io.to(`kitchen_${tenantId}`).emit('new_order', order);
+    io.to(`tenant_${tenantId}`).emit('new_order', order);
     io.to(`tenant_${tenantId}`).emit('table_updated', table);
 
     res.status(201).json(order);
@@ -264,13 +265,15 @@ exports.updateOrderStatus = async (req, res) => {
     // Notify customer
     io.to(`table_${order.tableId._id}`).emit('order_status_updated', order);
     
-    // If Ready, notify Billing
+    // If Ready, notify Billing & Tenant (Waiter)
     if (status === 'Ready' || status === 'Served') {
       io.to(`billing_${req.user.id}`).emit('order_ready', order);
+      io.to(`tenant_${req.user.id}`).emit('order_ready', order);
     }
     
-    // Notify Kitchen
+    // Notify Kitchen & Tenant (Waiter)
     io.to(`kitchen_${req.user.id}`).emit('order_status_updated', order);
+    io.to(`tenant_${req.user.id}`).emit('order_status_updated', order);
 
     res.json(order);
   } catch (error) {
