@@ -35,5 +35,6 @@ router.get('/public/menu/:tenantId/:tableId', restaurantController.getPublicMenu
 router.post('/public/order', restaurantController.placeOrder);
 router.get('/public/order/:orderId', restaurantController.getOrderStatus);
 router.post('/public/waiter-request', restaurantController.createWaiterRequest);
+router.get('/public/customer-lookup/:tenantId/:phone', restaurantController.lookupCustomerByPhone);
 
 module.exports = router;

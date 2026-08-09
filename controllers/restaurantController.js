@@ -3,6 +3,7 @@ const RestaurantOrder = require('../models/RestaurantOrder');
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 const User = require('../models/User');
+const Customer = require('../models/Customer');
 const { getIO } = require('../services/socketService');
 
 // ==========================================
@@ -196,6 +197,28 @@ exports.placeOrder = async (req, res) => {
     });
 
     await order.save();
+
+    // Auto Save / Create Customer in DB for this Tenant
+    if (customerPhone && customerPhone.trim()) {
+      const cleanPhone = customerPhone.trim();
+      const cleanName = (customerName && customerName.trim()) ? customerName.trim() : 'Guest';
+      try {
+        let existingCust = await Customer.findOne({ userId: tenantId, phone: cleanPhone });
+        if (!existingCust) {
+          existingCust = new Customer({
+            userId: tenantId,
+            name: cleanName,
+            phone: cleanPhone
+          });
+          await existingCust.save();
+        } else if (cleanName && cleanName !== 'Guest' && existingCust.name !== cleanName) {
+          existingCust.name = cleanName;
+          await existingCust.save();
+        }
+      } catch (custErr) {
+        console.error('Auto save customer error:', custErr);
+      }
+    }
     
     // Update table status to Ordering
     table.status = 'Ordering';
@@ -214,6 +237,24 @@ exports.placeOrder = async (req, res) => {
   } catch (error) {
     console.error('placeOrder error:', error);
     res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+exports.lookupCustomerByPhone = async (req, res) => {
+  try {
+    const { tenantId, phone } = req.params;
+    if (!tenantId || !phone) {
+      return res.status(400).json({ message: 'tenantId and phone are required' });
+    }
+    const cleanPhone = phone.trim();
+    const customer = await Customer.findOne({ userId: tenantId, phone: cleanPhone });
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+    res.json({ name: customer.name, phone: customer.phone, _id: customer._id });
+  } catch (error) {
+    console.error('lookupCustomerByPhone error:', error);
+    res.status(500).json({ message: 'Server Error' });
   }
 };
 
