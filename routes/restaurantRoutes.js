@@ -23,6 +23,7 @@ router.put('/orders/:id/status', protect, restaurantController.updateOrderStatus
 
 // Waiter Call Requests
 router.get('/waiter-requests', protect, restaurantController.getPendingWaiterRequests);
+router.put('/waiter-requests/resolve-all', protect, restaurantController.resolveAllWaiterRequests);
 router.put('/waiter-requests/:id/resolve', protect, restaurantController.resolveWaiterRequest);
 
 // ==========================================

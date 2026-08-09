@@ -342,3 +342,21 @@ exports.resolveWaiterRequest = async (req, res) => {
   }
 };
 
+exports.resolveAllWaiterRequests = async (req, res) => {
+  try {
+    await WaiterRequest.updateMany(
+      { tenantId: req.user.id, status: 'Pending' },
+      { status: 'Attended' }
+    );
+
+    const io = getIO();
+    io.to(`tenant_${req.user.id}`).emit('waiter_requests_cleared_all');
+
+    res.json({ message: 'All waiter requests marked as attended' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
