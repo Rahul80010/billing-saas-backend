@@ -93,7 +93,7 @@ const getProducts = async (req, res) => {
 // @access  Private
 const createProduct = async (req, res) => {
   try {
-    let { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, image, images, variants } = req.body;
+    let { name, price, gst, stock, unit, buyingCost, barcode, sku, hsnCode, category, lowStockAlert, lowStockAlertEnabled, description, foodType, image, images, variants } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ message: 'Product name is required' });
@@ -151,6 +151,7 @@ const createProduct = async (req, res) => {
       lowStockAlert: (lowStockAlert === undefined || lowStockAlert === null || lowStockAlert === '') ? 5 : Number(lowStockAlert),
       lowStockAlertEnabled: lowStockAlertEnabled !== undefined ? Boolean(lowStockAlertEnabled) : true,
       description: description !== undefined ? description.trim() : '',
+      foodType: ['Veg', 'Non-Veg', 'Egg'].includes(foodType) ? foodType : 'Veg',
       image: image !== undefined ? image : '',
       images: Array.isArray(images) ? images : [],
     });
@@ -269,6 +270,7 @@ const updateProduct = async (req, res) => {
       if (lowStockAlert !== undefined && lowStockAlert !== null && lowStockAlert !== '') product.lowStockAlert = Number(lowStockAlert);
       if (lowStockAlertEnabled !== undefined) product.lowStockAlertEnabled = Boolean(lowStockAlertEnabled);
       if (description !== undefined) product.description = description.trim();
+      if (foodType !== undefined && ['Veg', 'Non-Veg', 'Egg'].includes(foodType)) product.foodType = foodType;
       if (image !== undefined) product.image = image;
       if (images !== undefined && Array.isArray(images)) product.images = images;
 

@@ -70,6 +70,11 @@ const productSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  foodType: {
+    type: String,
+    enum: ['Veg', 'Non-Veg', 'Egg'],
+    default: 'Veg',
+  },
   image: {
     type: mongoose.Schema.Types.Mixed,
     default: '',
