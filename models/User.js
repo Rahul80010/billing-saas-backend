@@ -176,6 +176,61 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  enableCustomerStockSharing: {
+    type: Boolean,
+    default: false,
+  },
+  storeToken: {
+    type: String,
+    trim: true,
+    index: true,
+  },
+  storeName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  storeDescription: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  storeContactPhone: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  storeAddress: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  storeOpeningHours: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  showStockQuantity: {
+    type: Boolean,
+    default: true,
+  },
+  showOutOfStockProducts: {
+    type: Boolean,
+    default: true,
+  },
+  allowOnlineOrdering: {
+    type: Boolean,
+    default: true,
+  },
+  minOrderAmount: {
+    type: Number,
+    default: 0,
+  },
+  orderInstructions: {
+    type: String,
+    trim: true,
+    default: '',
+  },
   isAdmin: {
     type: Boolean,
     default: false,
