@@ -6,7 +6,7 @@ const StockOrder = require('../models/StockOrder');
 const Bill = require('../models/Bill');
 const Customer = require('../models/Customer');
 const Notification = require('../models/Notification');
-const { getIO } = require('../config/socket');
+const { getIO } = require('../services/socketService');
 
 /**
  * Generate unique store token
