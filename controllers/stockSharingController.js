@@ -105,6 +105,7 @@ exports.getPublicStore = async (req, res) => {
       storeAddress: user.storeAddress || user.businessAddress || '',
       storeOpeningHours: user.storeOpeningHours || '',
       logo: user.logo || '',
+      enableRestaurantMode: !!user.enableRestaurantMode,
       showStockQuantity: user.showStockQuantity !== false,
       showOutOfStockProducts: user.showOutOfStockProducts !== false,
       allowOnlineOrdering: user.allowOnlineOrdering !== false,
