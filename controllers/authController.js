@@ -313,7 +313,8 @@ const updateProfile = async (req, res) => {
     bankAccountName,
     panNumber,
     enableImei,
-    enableRestaurantMode
+    enableRestaurantMode,
+    businessType
   } = req.body;
 
   try {
@@ -355,6 +356,7 @@ const updateProfile = async (req, res) => {
       user.panNumber = panNumber !== undefined ? panNumber : user.panNumber;
       user.enableImei = enableImei !== undefined ? enableImei : user.enableImei;
       user.enableRestaurantMode = enableRestaurantMode !== undefined ? enableRestaurantMode : user.enableRestaurantMode;
+      user.businessType = businessType !== undefined ? businessType : user.businessType;
 
       const updatedUser = await user.save();
       res.json({

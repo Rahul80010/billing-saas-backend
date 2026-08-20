@@ -172,6 +172,11 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  businessType: {
+    type: String,
+    enum: ['Retail', 'Restaurant', 'Service', 'Clothing'],
+    default: 'Retail',
+  },
   enableRestaurantMode: {
     type: Boolean,
     default: false,
