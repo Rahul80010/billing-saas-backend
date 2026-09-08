@@ -65,6 +65,19 @@ const getTenantKeyPath = (tenantId, folder = 'products', filename = '', isThumb 
 };
 
 /**
+ * Build centralized Mohuri Gallery key path (e.g. mohuri-gallery/grocery/uuid.webp)
+ */
+const getGalleryKeyPath = (category = 'general', filename = '', isThumb = false) => {
+  const cleanCat = (category || 'general').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+  const finalFile = filename || generateUuidFilename('webp');
+
+  if (isThumb) {
+    return `mohuri-gallery/${cleanCat}/thumb/${finalFile}`;
+  }
+  return `mohuri-gallery/${cleanCat}/${finalFile}`;
+};
+
+/**
  * Upload a WebP buffer to Cloudflare R2 / S3 or Local Fallback
  * @param {Buffer} buffer - WebP binary image buffer
  * @param {string} keyPath - Object key path (e.g. tenant_123/products/uuid.webp)
@@ -195,4 +208,5 @@ module.exports = {
   getPublicCdnDomain,
   generateUuidFilename,
   getTenantKeyPath,
+  getGalleryKeyPath,
 };

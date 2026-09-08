@@ -55,6 +55,7 @@ app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/restaurant', require('./routes/restaurantRoutes'));
 app.use('/api/stock-sharing', require('./routes/stockSharingRoutes'));
+app.use('/api/gallery', require('./routes/galleryRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {
