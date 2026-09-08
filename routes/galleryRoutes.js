@@ -16,13 +16,7 @@ const {
   deleteCategory,
 } = require('../controllers/galleryController');
 
-// Merchant & General Authenticated User Routes
-router.get('/', protect, getGalleryAssets);
-router.get('/categories', protect, getGalleryCategories);
-router.get('/:id', protect, getGalleryAssetById);
-router.post('/usage/:id', protect, recordAssetUsage);
-
-// Admin-Only Routes
+// Admin-Only Routes (Must be declared before /:id)
 router.get('/admin/stats', protect, admin, getGalleryStats);
 router.post('/admin/upload', protect, admin, uploadGalleryAsset);
 router.post('/admin', protect, admin, uploadGalleryAsset);
@@ -34,5 +28,11 @@ router.delete('/admin/:id', protect, admin, deleteGalleryAsset);
 router.post('/admin/categories', protect, admin, createCategory);
 router.put('/admin/categories/:id', protect, admin, updateCategory);
 router.delete('/admin/categories/:id', protect, admin, deleteCategory);
+
+// Merchant & General Authenticated User Routes
+router.get('/', protect, getGalleryAssets);
+router.get('/categories', protect, getGalleryCategories);
+router.post('/usage/:id', protect, recordAssetUsage);
+router.get('/:id', protect, getGalleryAssetById);
 
 module.exports = router;
