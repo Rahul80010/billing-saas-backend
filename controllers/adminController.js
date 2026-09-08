@@ -85,6 +85,11 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
+// Helper to escape regex special characters
+const escapeRegex = (text) => {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+};
+
 // @desc    Get paginated, searchable list of all store owners / merchants
 // @route   GET /api/admin/merchants
 // @access  Private/Admin
@@ -96,12 +101,21 @@ const getMerchants = async (req, res) => {
 
   const query = { isAdmin: { $ne: true } };
 
-  if (search) {
+  const cleanTerm = search.trim().replace(/^#/, '');
+  if (cleanTerm) {
+    const escaped = escapeRegex(cleanTerm);
+    const regex = new RegExp(escaped, 'i');
     query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-      { businessPhone: { $regex: search, $options: 'i' } },
-      { businessName: { $regex: search, $options: 'i' } }
+      { name: regex },
+      { email: regex },
+      { businessPhone: regex },
+      { businessName: regex },
+      { storeName: regex },
+      { businessEmail: regex },
+      { gstin: regex },
+      { storeToken: regex },
+      { upiId: regex },
+      { $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: escaped, options: 'i' } } }
     ];
   }
 
