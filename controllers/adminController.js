@@ -113,17 +113,22 @@ const getMerchants = async (req, res) => {
       .skip(skip)
       .limit(limit);
 
-    // Map counts of assets (Bills, Products, Customers) for each merchant
+    // Map counts of assets (Bills, Products, Customers) and revenue for each merchant
     const merchants = await Promise.all(users.map(async (u) => {
-      const productsCount = await Product.countDocuments({ user: u._id });
-      const customersCount = await Customer.countDocuments({ user: u._id });
-      const billsCount = await Bill.countDocuments({ user: u._id });
+      const userFilter = { $or: [{ userId: u._id }, { user: u._id }] };
+      const productsCount = await Product.countDocuments(userFilter);
+      const customersCount = await Customer.countDocuments(userFilter);
+      const billsCount = await Bill.countDocuments(userFilter);
+      
+      const bills = await Bill.find(userFilter, 'total');
+      const totalRevenue = bills.reduce((sum, b) => sum + (b.total || 0), 0);
       
       return {
         ...u.toObject(),
         productsCount,
         customersCount,
-        billsCount
+        billsCount,
+        totalRevenue
       };
     }));
 
@@ -132,6 +137,55 @@ const getMerchants = async (req, res) => {
       page,
       pages: Math.ceil(total / limit),
       total
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get complete merchant details including their products, bills, and customers
+// @route   GET /api/admin/merchants/:id
+// @access  Private/Admin
+const getMerchantById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .select('-password -otp -otpExpires -resetPasswordOtp -resetPasswordOtpExpires');
+
+    if (!user) {
+      return res.status(404).json({ message: 'Merchant not found' });
+    }
+
+    const userFilter = { $or: [{ userId: user._id }, { user: user._id }] };
+
+    const [
+      productsCount,
+      customersCount,
+      billsCount,
+      products,
+      bills,
+      customers
+    ] = await Promise.all([
+      Product.countDocuments(userFilter),
+      Customer.countDocuments(userFilter),
+      Bill.countDocuments(userFilter),
+      Product.find(userFilter).sort({ createdAt: -1 }).limit(20),
+      Bill.find(userFilter).sort({ createdAt: -1 }).limit(20),
+      Customer.find(userFilter).sort({ createdAt: -1 }).limit(20)
+    ]);
+
+    const totalRevenue = bills.reduce((sum, b) => sum + (b.total || 0), 0);
+
+    res.json({
+      merchant: user,
+      stats: {
+        productsCount,
+        customersCount,
+        billsCount,
+        totalRevenue
+      },
+      products,
+      bills,
+      customers
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -222,6 +276,7 @@ const broadcastMessage = async (req, res) => {
 module.exports = {
   getDashboardStats,
   getMerchants,
+  getMerchantById,
   updateMerchantStatus,
   broadcastMessage
 };

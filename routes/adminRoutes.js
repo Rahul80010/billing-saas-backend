@@ -4,6 +4,7 @@ const { protect, admin } = require('../middleware/authMiddleware');
 const {
   getDashboardStats,
   getMerchants,
+  getMerchantById,
   updateMerchantStatus,
   broadcastMessage
 } = require('../controllers/adminController');
@@ -15,6 +16,7 @@ router.use(admin);
 // Admin Action Routes
 router.get('/stats', getDashboardStats);
 router.get('/merchants', getMerchants);
+router.get('/merchants/:id', getMerchantById);
 router.put('/merchants/:id/status', updateMerchantStatus);
 router.post('/broadcast', broadcastMessage);
 

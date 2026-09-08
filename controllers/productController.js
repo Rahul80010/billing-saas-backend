@@ -248,8 +248,19 @@ const updateProduct = async (req, res) => {
         }
       }
 
-      // If image is being replaced, purge old image from cloud
-      if (image !== undefined && image !== product.image && product.image) {
+      // Helper to extract comparable image URL string
+      const getImageUrlString = (img) => {
+        if (!img) return '';
+        if (typeof img === 'string') return img.trim();
+        if (typeof img === 'object') return (img.url || img.thumbnail || '').trim();
+        return '';
+      };
+
+      // If image is being replaced, purge old image from cloud storage
+      const newImgStr = getImageUrlString(image);
+      const oldImgStr = getImageUrlString(product.image);
+
+      if (image !== undefined && oldImgStr && newImgStr !== oldImgStr) {
         await deleteImageFromStorage(product.image);
       }
 
