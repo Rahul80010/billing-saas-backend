@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, optionalProtect, admin } = require('../middleware/authMiddleware');
 const {
   getGalleryAssets,
   getGalleryCategories,
@@ -29,10 +29,10 @@ router.post('/admin/categories', protect, admin, createCategory);
 router.put('/admin/categories/:id', protect, admin, updateCategory);
 router.delete('/admin/categories/:id', protect, admin, deleteCategory);
 
-// Merchant & General Authenticated User Routes
-router.get('/', protect, getGalleryAssets);
-router.get('/categories', protect, getGalleryCategories);
-router.post('/usage/:id', protect, recordAssetUsage);
-router.get('/:id', protect, getGalleryAssetById);
+// Merchant, Mobile App & Public Gallery Browse Routes (Accessible with or without token)
+router.get('/', optionalProtect, getGalleryAssets);
+router.get('/categories', optionalProtect, getGalleryCategories);
+router.post('/usage/:id', optionalProtect, recordAssetUsage);
+router.get('/:id', optionalProtect, getGalleryAssetById);
 
 module.exports = router;
