@@ -3,11 +3,11 @@ const path = require('path');
 const crypto = require('crypto');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
-// Initialize S3Client for Cloudflare R2 / AWS S3 if credentials exist
+// Initialize S3Client for Cloudflare R2 / AWS S3
 const getS3Client = () => {
-  const accountId = process.env.R2_ACCOUNT_ID || process.env.AWS_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+  const accountId = process.env.R2_ACCOUNT_ID || 'b66335680e85ba1b77b8a1bd05ddc272';
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID || '31e686a296e9631212a35bc92ed16446';
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || 'cfc5e2635440772d7ec3cbbc5ff7d19778bb46250d132fbde2d23f71060ea267';
   const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : process.env.AWS_S3_ENDPOINT);
 
   if (!accessKeyId || !secretAccessKey) {
@@ -29,16 +29,16 @@ const getBucketName = () => {
 };
 
 const getPublicCdnDomain = () => {
-  const publicDomain = process.env.R2_PUBLIC_DOMAIN || process.env.AWS_S3_PUBLIC_DOMAIN;
+  const publicDomain = process.env.R2_PUBLIC_DOMAIN || process.env.AWS_S3_PUBLIC_DOMAIN || 'https://pub-8dfe6da5cfb64742aec95d39d3bc73ae.r2.dev';
   if (publicDomain) {
     return publicDomain.endsWith('/') ? publicDomain.slice(0, -1) : publicDomain;
   }
-  const accountId = process.env.R2_ACCOUNT_ID;
+  const accountId = process.env.R2_ACCOUNT_ID || 'b66335680e85ba1b77b8a1bd05ddc272';
   const bucketName = getBucketName();
   if (accountId && bucketName) {
     return `https://${bucketName}.${accountId}.r2.dev`;
   }
-  return '';
+  return 'https://pub-8dfe6da5cfb64742aec95d39d3bc73ae.r2.dev';
 };
 
 /**
