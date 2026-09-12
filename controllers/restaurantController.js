@@ -350,6 +350,38 @@ exports.placeOrder = async (req, res) => {
     table.status = 'Ordering';
     await table.save();
 
+    // If it's a room and there is an active HotelBooking, attach food order to room folio
+    if (table.isRoom) {
+      try {
+        const HotelBooking = require('../models/HotelBooking');
+        const activeBooking = await HotelBooking.findOne({
+          tenantId,
+          roomId: table._id,
+          status: 'Checked-In'
+        });
+
+        if (activeBooking) {
+          const itemsSummary = (formattedItems || [])
+            .map(item => `${item.quantity}x Item`)
+            .join(', ');
+
+          activeBooking.foodOrders.push({
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            amount: totalAmount,
+            date: new Date(),
+            itemsSummary: itemsSummary
+          });
+          await activeBooking.save();
+
+          const io = getIO();
+          io.to(`tenant_${tenantId.toString()}`).emit('hotel_booking_updated', activeBooking);
+        }
+      } catch (hbErr) {
+        console.warn('Could not attach order to active HotelBooking:', hbErr);
+      }
+    }
+
     // Populate items for frontend
     await order.populate('items.product items.variant tableId');
 
