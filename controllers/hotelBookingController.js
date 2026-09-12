@@ -396,3 +396,212 @@ exports.markRoomClean = async (req, res) => {
     res.status(500).json({ message: 'Server Error' });
   }
 };
+
+// ==========================================
+// HOTEL GUEST DIRECTORY & 360° ORDER HISTORY
+// ==========================================
+
+// Get all unique guests with aggregated statistics
+exports.getHotelGuests = async (req, res) => {
+  try {
+    const tenantId = req.user.id;
+    const { search, vipOnly } = req.query;
+
+    const custQuery = { userId: tenantId };
+    if (vipOnly === 'true') {
+      custQuery.isVip = true;
+    }
+
+    if (search && search.trim()) {
+      const q = search.trim();
+      const regex = new RegExp(q, 'i');
+      custQuery.$or = [
+        { name: regex },
+        { phone: regex },
+        { email: regex },
+        { idProofNumber: regex },
+        { city: regex }
+      ];
+    }
+
+    const customers = await Customer.find(custQuery).sort({ updatedAt: -1 });
+
+    // Fetch all bookings for this tenant
+    const allBookings = await HotelBooking.find({ tenantId }).sort({ checkInDate: -1 });
+    // Fetch all restaurant orders for this tenant
+    const allOrders = await RestaurantOrder.find({ tenantId });
+
+    // Map customer stats
+    const guestsList = customers.map(c => {
+      const cPhone = (c.phone || '').trim();
+      const guestBookings = allBookings.filter(b => (b.guestPhone || '').trim() === cPhone);
+      const guestOrders = allOrders.filter(o => (o.customerPhone || '').trim() === cPhone);
+
+      const totalStays = guestBookings.length;
+      const totalStaySpent = guestBookings.reduce((sum, b) => sum + (b.grandTotal || b.subTotal || 0), 0);
+      const totalFoodSpent = guestOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const totalLifetimeSpent = totalStaySpent + totalFoodSpent;
+
+      const activeStay = guestBookings.find(b => b.status === 'Checked-In');
+      const lastBooking = guestBookings[0];
+
+      return {
+        _id: c._id,
+        name: c.name,
+        phone: c.phone,
+        email: c.email || '',
+        address: c.address || '',
+        city: c.city || '',
+        idProofType: c.idProofType || 'Aadhaar Card',
+        idProofNumber: c.idProofNumber || '',
+        notes: c.notes || '',
+        isVip: !!c.isVip,
+        totalStays,
+        totalFoodOrders: guestOrders.length,
+        totalLifetimeSpent,
+        currentInHouseRoom: activeStay ? (activeStay.roomName || `Room ${activeStay.roomNumber}`) : null,
+        activeBookingId: activeStay ? activeStay._id : null,
+        lastStayDate: lastBooking ? lastBooking.checkInDate : c.updatedAt,
+        createdAt: c.createdAt
+      };
+    });
+
+    res.json(guestsList);
+  } catch (error) {
+    console.error('getHotelGuests error:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+// Get single guest 360° profile with full itemized orders & stay history
+exports.getHotelGuestDetails = async (req, res) => {
+  try {
+    const tenantId = req.user.id;
+    const { phoneOrId } = req.params;
+
+    let customer = null;
+    if (phoneOrId.match(/^[0-9a-fA-F]{24}$/)) {
+      customer = await Customer.findOne({ _id: phoneOrId, userId: tenantId });
+    }
+    if (!customer) {
+      customer = await Customer.findOne({ phone: phoneOrId.trim(), userId: tenantId });
+    }
+
+    const cleanPhone = customer ? customer.phone : phoneOrId.trim();
+
+    // 1. Fetch all Bookings for this guest
+    const bookings = await HotelBooking.find({
+      tenantId,
+      guestPhone: cleanPhone
+    }).populate('roomId').sort({ checkInDate: -1 });
+
+    // 2. Fetch all Food & In-Room Dining Orders with populated products and variants
+    const foodOrders = await RestaurantOrder.find({
+      tenantId,
+      customerPhone: cleanPhone
+    }).populate('items.product items.variant tableId').sort({ createdAt: -1 });
+
+    const totalStays = bookings.length;
+    const totalStaySpent = bookings.reduce((sum, b) => sum + (b.grandTotal || b.subTotal || 0), 0);
+    const totalFoodSpent = foodOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    const totalLifetimeSpent = totalStaySpent + totalFoodSpent;
+
+    res.json({
+      customer: customer || {
+        name: bookings[0]?.guestName || foodOrders[0]?.customerName || 'Guest',
+        phone: cleanPhone,
+        idProofType: bookings[0]?.idProofType || 'Aadhaar Card',
+        idProofNumber: bookings[0]?.idProofNumber || ''
+      },
+      bookings,
+      foodOrders,
+      summary: {
+        totalStays,
+        totalStaySpent,
+        totalFoodOrders: foodOrders.length,
+        totalFoodSpent,
+        totalLifetimeSpent
+      }
+    });
+  } catch (error) {
+    console.error('getHotelGuestDetails error:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+// Create New Hotel Guest
+exports.createHotelGuest = async (req, res) => {
+  try {
+    const tenantId = req.user.id;
+    const { name, phone, email, address, city, idProofType, idProofNumber, notes, isVip } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Guest name is required' });
+    }
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({ message: 'Guest phone number is required' });
+    }
+
+    const cleanPhone = phone.trim();
+    let customer = await Customer.findOne({ userId: tenantId, phone: cleanPhone });
+
+    if (customer) {
+      customer.name = name.trim();
+      if (email) customer.email = email.trim();
+      if (address) customer.address = address.trim();
+      if (city) customer.city = city.trim();
+      if (idProofType) customer.idProofType = idProofType;
+      if (idProofNumber) customer.idProofNumber = idProofNumber.trim();
+      if (notes !== undefined) customer.notes = notes.trim();
+      if (isVip !== undefined) customer.isVip = !!isVip;
+      await customer.save();
+      return res.json(customer);
+    }
+
+    customer = new Customer({
+      userId: tenantId,
+      name: name.trim(),
+      phone: cleanPhone,
+      email: (email || '').trim(),
+      address: (address || '').trim(),
+      city: (city || '').trim(),
+      idProofType: idProofType || 'Aadhaar Card',
+      idProofNumber: (idProofNumber || '').trim(),
+      notes: (notes || '').trim(),
+      isVip: !!isVip
+    });
+
+    await customer.save();
+    res.status(201).json(customer);
+  } catch (error) {
+    console.error('createHotelGuest error:', error);
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// Update Existing Hotel Guest
+exports.updateHotelGuest = async (req, res) => {
+  try {
+    const tenantId = req.user.id;
+    const { name, phone, email, address, city, idProofType, idProofNumber, notes, isVip } = req.body;
+
+    const customer = await Customer.findOne({ _id: req.params.id, userId: tenantId });
+    if (!customer) return res.status(404).json({ message: 'Customer not found' });
+
+    if (name) customer.name = name.trim();
+    if (phone) customer.phone = phone.trim();
+    if (email !== undefined) customer.email = email.trim();
+    if (address !== undefined) customer.address = address.trim();
+    if (city !== undefined) customer.city = city.trim();
+    if (idProofType) customer.idProofType = idProofType;
+    if (idProofNumber !== undefined) customer.idProofNumber = idProofNumber.trim();
+    if (notes !== undefined) customer.notes = notes.trim();
+    if (isVip !== undefined) customer.isVip = !!isVip;
+
+    await customer.save();
+    res.json(customer);
+  } catch (error) {
+    console.error('updateHotelGuest error:', error);
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
