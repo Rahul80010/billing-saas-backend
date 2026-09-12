@@ -149,15 +149,27 @@ exports.getPublicMenu = async (req, res) => {
     const { tenantId, tableId } = req.params;
     
     const tenant = await User.findById(tenantId).select(
-      'name businessName logo enableRestaurantMode enableHotelMode hotelAllowRoomCharge hotelServiceCharge hotelWifiName hotelWifiPassword hotelReceptionPhone'
+      'name businessName logo enableRestaurantMode enableHotelMode hotelAllowRoomCharge hotelServiceCharge hotelWifiName hotelWifiPassword hotelReceptionPhone businessType'
     );
-    if (!tenant || (!tenant.enableRestaurantMode && !tenant.enableHotelMode)) {
-      return res.status(404).json({ message: 'Store not found or dining/room service mode disabled' });
+    if (!tenant) {
+      return res.status(404).json({ message: 'Store or Hotel not found' });
     }
     
     const table = await RestaurantTable.findOne({ _id: tableId, tenantId });
     if (!table) {
       return res.status(404).json({ message: 'Table or Room not found' });
+    }
+
+    const isAllowed = !!(
+      tenant.enableRestaurantMode || 
+      tenant.enableHotelMode || 
+      tenant.businessType === 'Hotel' || 
+      tenant.businessType === 'Restaurant' ||
+      table.isRoom
+    );
+
+    if (!isAllowed) {
+      return res.status(404).json({ message: 'Store not found or dining/room service mode disabled' });
     }
 
     const products = await Product.find({ userId: tenantId }).lean();
@@ -245,7 +257,7 @@ exports.getPublicMenu = async (req, res) => {
         name: tenant.businessName || tenant.name,
         logo: tenant.logo,
         enableRestaurantMode: !!tenant.enableRestaurantMode,
-        enableHotelMode: !!tenant.enableHotelMode,
+        enableHotelMode: !!tenant.enableHotelMode || tenant.businessType === 'Hotel' || !!table.isRoom,
         hotelAllowRoomCharge: tenant.hotelAllowRoomCharge !== false,
         hotelServiceCharge: tenant.hotelServiceCharge || 0,
         hotelWifiName: tenant.hotelWifiName || '',

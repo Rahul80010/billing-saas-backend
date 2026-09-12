@@ -314,6 +314,12 @@ const updateProfile = async (req, res) => {
     panNumber,
     enableImei,
     enableRestaurantMode,
+    enableHotelMode,
+    hotelAllowRoomCharge,
+    hotelServiceCharge,
+    hotelWifiName,
+    hotelWifiPassword,
+    hotelReceptionPhone,
     businessType
   } = req.body;
 
@@ -356,7 +362,19 @@ const updateProfile = async (req, res) => {
       user.panNumber = panNumber !== undefined ? panNumber : user.panNumber;
       user.enableImei = enableImei !== undefined ? enableImei : user.enableImei;
       user.enableRestaurantMode = enableRestaurantMode !== undefined ? enableRestaurantMode : user.enableRestaurantMode;
+      
+      // Hotel & Business Type configurations
       user.businessType = businessType !== undefined ? businessType : user.businessType;
+      if (enableHotelMode !== undefined) {
+        user.enableHotelMode = enableHotelMode;
+      } else if (businessType === 'Hotel') {
+        user.enableHotelMode = true;
+      }
+      if (hotelAllowRoomCharge !== undefined) user.hotelAllowRoomCharge = hotelAllowRoomCharge;
+      if (hotelServiceCharge !== undefined) user.hotelServiceCharge = Number(hotelServiceCharge);
+      if (hotelWifiName !== undefined) user.hotelWifiName = hotelWifiName;
+      if (hotelWifiPassword !== undefined) user.hotelWifiPassword = hotelWifiPassword;
+      if (hotelReceptionPhone !== undefined) user.hotelReceptionPhone = hotelReceptionPhone;
 
       const updatedUser = await user.save();
       res.json({
@@ -392,7 +410,14 @@ const updateProfile = async (req, res) => {
         bankAccountName: updatedUser.bankAccountName,
         panNumber: updatedUser.panNumber,
         enableImei: updatedUser.enableImei,
-        enableRestaurantMode: updatedUser.enableRestaurantMode
+        enableRestaurantMode: updatedUser.enableRestaurantMode,
+        enableHotelMode: updatedUser.enableHotelMode,
+        hotelAllowRoomCharge: updatedUser.hotelAllowRoomCharge,
+        hotelServiceCharge: updatedUser.hotelServiceCharge,
+        hotelWifiName: updatedUser.hotelWifiName,
+        hotelWifiPassword: updatedUser.hotelWifiPassword,
+        hotelReceptionPhone: updatedUser.hotelReceptionPhone,
+        businessType: updatedUser.businessType
       });
     } else {
       res.status(404).json({ message: 'User not found' });
