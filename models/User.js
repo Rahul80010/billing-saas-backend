@@ -174,12 +174,39 @@ const userSchema = new mongoose.Schema({
   },
   businessType: {
     type: String,
-    enum: ['Retail', 'Restaurant', 'Service', 'Clothing'],
+    enum: ['Retail', 'Restaurant', 'Hotel', 'Service', 'Clothing'],
     default: 'Retail',
   },
   enableRestaurantMode: {
     type: Boolean,
     default: false,
+  },
+  enableHotelMode: {
+    type: Boolean,
+    default: false,
+  },
+  hotelAllowRoomCharge: {
+    type: Boolean,
+    default: true,
+  },
+  hotelServiceCharge: {
+    type: Number,
+    default: 0,
+  },
+  hotelWifiName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  hotelWifiPassword: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  hotelReceptionPhone: {
+    type: String,
+    trim: true,
+    default: '',
   },
   enableCustomerStockSharing: {
     type: Boolean,

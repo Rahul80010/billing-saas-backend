@@ -8,6 +8,7 @@ const restaurantController = require('../controllers/restaurantController');
 // ==========================================
 
 router.post('/tables', protect, restaurantController.createTable);
+router.post('/rooms/bulk', protect, restaurantController.bulkCreateRooms);
 router.get('/tables', protect, restaurantController.getTables);
 router.put('/tables/:id', protect, restaurantController.updateTable);
 router.delete('/tables/:id', protect, restaurantController.deleteTable);

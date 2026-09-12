@@ -44,8 +44,17 @@ const restaurantOrderSchema = new mongoose.Schema({
   items: [orderItemSchema],
   orderType: {
     type: String,
-    enum: ['Dine-in', 'Takeaway', 'Delivery'],
+    enum: ['Dine-in', 'Room-Service', 'Takeaway', 'Delivery'],
     default: 'Dine-in',
+  },
+  paymentOption: {
+    type: String,
+    enum: ['Direct-Pay', 'Charge-To-Room'],
+    default: 'Direct-Pay',
+  },
+  roomNumber: {
+    type: String,
+    default: '',
   },
   customerName: {
     type: String,

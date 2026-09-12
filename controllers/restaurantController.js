@@ -12,28 +12,78 @@ const { getIO } = require('../services/socketService');
 
 exports.createTable = async (req, res) => {
   try {
-    const { tableName, tableNumber } = req.body;
+    const { tableName, tableNumber, capacity, section, isRoom, roomType, floor, currentGuestName, currentGuestPhone } = req.body;
     
     // Check if tableNumber already exists for this tenant
     const existing = await RestaurantTable.findOne({ tenantId: req.user.id, tableNumber });
     if (existing) {
-      return res.status(400).json({ message: 'Table number already exists' });
+      return res.status(400).json({ message: isRoom ? 'Room number already exists' : 'Table number already exists' });
     }
 
     const table = new RestaurantTable({
       tenantId: req.user.id,
-      tableName,
+      tableName: tableName || (isRoom ? `Room ${tableNumber}` : `Table ${tableNumber}`),
       tableNumber,
+      capacity: Number(capacity) || (isRoom ? 2 : 4),
+      section: section || floor || (isRoom ? '1st Floor' : 'Ground Floor'),
+      isRoom: !!isRoom,
+      roomType: roomType || 'Standard',
+      floor: floor || section || '1st Floor',
+      currentGuestName: currentGuestName || '',
+      currentGuestPhone: currentGuestPhone || '',
     });
     
     // Generate QR Data link
-    // E.g., https://mohuri.com/menu/[tenantId]/[tableId]
     table.qrCodeData = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/menu/${req.user.id}/${table._id}`;
     
     await table.save();
     res.status(201).json(table);
   } catch (error) {
     console.error(error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+exports.bulkCreateRooms = async (req, res) => {
+  try {
+    const { startNumber, endNumber, floor, roomType, prefix } = req.body;
+    const start = parseInt(startNumber);
+    const end = parseInt(endNumber);
+    const roomPrefix = (prefix || 'Room').trim();
+    const roomFloor = (floor || '1st Floor').trim();
+    const type = (roomType || 'Standard').trim();
+
+    if (isNaN(start) || isNaN(end) || start > end) {
+      return res.status(400).json({ message: 'Invalid start or end room number' });
+    }
+
+    if (end - start > 100) {
+      return res.status(400).json({ message: 'Cannot create more than 100 rooms in one batch' });
+    }
+
+    const createdRooms = [];
+    for (let num = start; num <= end; num++) {
+      const existing = await RestaurantTable.findOne({ tenantId: req.user.id, tableNumber: num });
+      if (!existing) {
+        const room = new RestaurantTable({
+          tenantId: req.user.id,
+          tableName: `${roomPrefix} ${num}`,
+          tableNumber: num,
+          isRoom: true,
+          roomType: type,
+          floor: roomFloor,
+          section: roomFloor,
+          capacity: 2,
+        });
+        room.qrCodeData = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/menu/${req.user.id}/${room._id}`;
+        await room.save();
+        createdRooms.push(room);
+      }
+    }
+
+    res.status(201).json({ message: `Successfully created ${createdRooms.length} room(s)`, rooms: createdRooms });
+  } catch (error) {
+    console.error('bulkCreateRooms error:', error);
     res.status(500).json({ message: 'Server Error' });
   }
 };
@@ -50,14 +100,21 @@ exports.getTables = async (req, res) => {
 
 exports.updateTable = async (req, res) => {
   try {
-    const { tableName, tableNumber, status } = req.body;
+    const { tableName, tableNumber, status, capacity, section, isRoom, roomType, floor, currentGuestName, currentGuestPhone } = req.body;
     const table = await RestaurantTable.findOne({ _id: req.params.id, tenantId: req.user.id });
     
-    if (!table) return res.status(404).json({ message: 'Table not found' });
+    if (!table) return res.status(404).json({ message: 'Record not found' });
     
-    if (tableName) table.tableName = tableName;
-    if (tableNumber) table.tableNumber = tableNumber;
-    if (status) table.status = status;
+    if (tableName !== undefined) table.tableName = tableName;
+    if (tableNumber !== undefined) table.tableNumber = tableNumber;
+    if (status !== undefined) table.status = status;
+    if (capacity !== undefined) table.capacity = Number(capacity);
+    if (section !== undefined) table.section = section;
+    if (isRoom !== undefined) table.isRoom = !!isRoom;
+    if (roomType !== undefined) table.roomType = roomType;
+    if (floor !== undefined) table.floor = floor;
+    if (currentGuestName !== undefined) table.currentGuestName = currentGuestName;
+    if (currentGuestPhone !== undefined) table.currentGuestPhone = currentGuestPhone;
     
     await table.save();
     
@@ -75,8 +132,8 @@ exports.updateTable = async (req, res) => {
 exports.deleteTable = async (req, res) => {
   try {
     const table = await RestaurantTable.findOneAndDelete({ _id: req.params.id, tenantId: req.user.id });
-    if (!table) return res.status(404).json({ message: 'Table not found' });
-    res.json({ message: 'Table removed' });
+    if (!table) return res.status(404).json({ message: 'Record not found' });
+    res.json({ message: table.isRoom ? 'Room removed' : 'Table removed' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server Error' });
@@ -91,14 +148,16 @@ exports.getPublicMenu = async (req, res) => {
   try {
     const { tenantId, tableId } = req.params;
     
-    const tenant = await User.findById(tenantId).select('name businessName logo enableRestaurantMode');
-    if (!tenant || !tenant.enableRestaurantMode) {
-      return res.status(404).json({ message: 'Restaurant not found or mode disabled' });
+    const tenant = await User.findById(tenantId).select(
+      'name businessName logo enableRestaurantMode enableHotelMode hotelAllowRoomCharge hotelServiceCharge hotelWifiName hotelWifiPassword hotelReceptionPhone'
+    );
+    if (!tenant || (!tenant.enableRestaurantMode && !tenant.enableHotelMode)) {
+      return res.status(404).json({ message: 'Store not found or dining/room service mode disabled' });
     }
     
     const table = await RestaurantTable.findOne({ _id: tableId, tenantId });
     if (!table) {
-      return res.status(404).json({ message: 'Table not found' });
+      return res.status(404).json({ message: 'Table or Room not found' });
     }
 
     const products = await Product.find({ userId: tenantId }).lean();
@@ -184,12 +243,22 @@ exports.getPublicMenu = async (req, res) => {
     res.json({
       restaurant: {
         name: tenant.businessName || tenant.name,
-        logo: tenant.logo
+        logo: tenant.logo,
+        enableRestaurantMode: !!tenant.enableRestaurantMode,
+        enableHotelMode: !!tenant.enableHotelMode,
+        hotelAllowRoomCharge: tenant.hotelAllowRoomCharge !== false,
+        hotelServiceCharge: tenant.hotelServiceCharge || 0,
+        hotelWifiName: tenant.hotelWifiName || '',
+        hotelWifiPassword: tenant.hotelWifiPassword || '',
+        hotelReceptionPhone: tenant.hotelReceptionPhone || '',
       },
       table: {
         id: table._id,
         name: table.tableName,
-        number: table.tableNumber
+        number: table.tableNumber,
+        isRoom: !!table.isRoom,
+        roomType: table.roomType || 'Standard',
+        floor: table.floor || table.section || '1st Floor',
       },
       menu: populatedProducts,
       activeOrder: combinedActiveOrder
@@ -203,7 +272,7 @@ exports.getPublicMenu = async (req, res) => {
 exports.placeOrder = async (req, res) => {
   try {
     const tenantId = req.user ? req.user.id : req.body.tenantId;
-    const { tableId, items, customerName, customerPhone, notes, orderType } = req.body;
+    const { tableId, items, customerName, customerPhone, notes, orderType, paymentOption } = req.body;
 
     if (!tenantId) {
       return res.status(400).json({ message: 'Tenant ID is required' });
@@ -234,12 +303,18 @@ exports.placeOrder = async (req, res) => {
     const count = await RestaurantOrder.countDocuments({ tenantId });
     const orderNumber = `ORD-${Date.now().toString().slice(-4)}-${count + 1}`;
 
+    const resolvedOrderType = orderType || (table.isRoom ? 'Room-Service' : 'Dine-in');
+    const resolvedPaymentOption = paymentOption || 'Direct-Pay';
+    const roomNumber = table.isRoom ? (table.tableName || `Room ${table.tableNumber}`) : '';
+
     const order = new RestaurantOrder({
       tenantId,
       tableId,
       orderNumber,
       items: formattedItems,
-      orderType: orderType || 'Dine-in',
+      orderType: resolvedOrderType,
+      paymentOption: resolvedPaymentOption,
+      roomNumber,
       customerName: customerName || '',
       customerPhone: customerPhone || '',
       notes: notes || '',
