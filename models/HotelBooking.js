@@ -71,6 +71,43 @@ const hotelBookingSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  // Additional / Co-Guests staying in the same room
+  additionalGuests: [
+    {
+      name: {
+        type: String,
+        trim: true,
+        default: '',
+      },
+      phone: {
+        type: String,
+        trim: true,
+        default: '',
+      },
+      age: {
+        type: Number,
+        default: null,
+      },
+      gender: {
+        type: String,
+        default: '',
+      },
+      relationship: {
+        type: String,
+        default: '',
+      },
+      idProofType: {
+        type: String,
+        enum: ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID', 'Govt ID', 'PAN Card', 'Other'],
+        default: 'Aadhaar Card',
+      },
+      idProofNumber: {
+        type: String,
+        trim: true,
+        default: '',
+      },
+    }
+  ],
   // Stay Dates & Rates
   checkInDate: {
     type: Date,

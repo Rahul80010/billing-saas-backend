@@ -19,6 +19,7 @@ exports.checkInGuest = async (req, res) => {
       idProofNumber,
       numberOfAdults,
       numberOfChildren,
+      additionalGuests,
       checkInDate,
       expectedCheckOutDate,
       roomRatePerNight,
@@ -55,6 +56,21 @@ exports.checkInGuest = async (req, res) => {
     const rate = Number(roomRatePerNight) || 0;
     const advance = Number(advancePayment) || 0;
 
+    // Filter and sanitize additional guests
+    const cleanAdditionalGuests = Array.isArray(additionalGuests)
+      ? additionalGuests
+          .filter(g => g && g.name && g.name.trim())
+          .map(g => ({
+            name: g.name.trim(),
+            phone: (g.phone || '').trim(),
+            age: g.age ? Number(g.age) : null,
+            gender: g.gender || '',
+            relationship: (g.relationship || '').trim(),
+            idProofType: g.idProofType || 'Aadhaar Card',
+            idProofNumber: (g.idProofNumber || '').trim(),
+          }))
+      : [];
+
     const booking = new HotelBooking({
       tenantId,
       bookingNumber,
@@ -69,8 +85,9 @@ exports.checkInGuest = async (req, res) => {
       guestAddress: (guestAddress || '').trim(),
       idProofType: idProofType || 'Aadhaar Card',
       idProofNumber: (idProofNumber || '').trim(),
-      numberOfAdults: Number(numberOfAdults) || 1,
+      numberOfAdults: Number(numberOfAdults) || (1 + cleanAdditionalGuests.length),
       numberOfChildren: Number(numberOfChildren) || 0,
+      additionalGuests: cleanAdditionalGuests,
       checkInDate: checkIn,
       expectedCheckOutDate: expectedCheckOutDate ? new Date(expectedCheckOutDate) : null,
       roomRatePerNight: rate,
