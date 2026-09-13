@@ -315,9 +315,33 @@ exports.placeOrder = async (req, res) => {
     const count = await RestaurantOrder.countDocuments({ tenantId });
     const orderNumber = `ORD-${Date.now().toString().slice(-4)}-${count + 1}`;
 
-    const resolvedOrderType = orderType || (table.isRoom ? 'Room-Service' : 'Dine-in');
-    const resolvedPaymentOption = paymentOption || 'Direct-Pay';
-    const roomNumber = table.isRoom ? (table.tableName || `Room ${table.tableNumber}`) : '';
+    // Check if there is an active HotelBooking for this table/room
+    let activeBooking = null;
+    try {
+      const HotelBooking = require('../models/HotelBooking');
+      activeBooking = await HotelBooking.findOne({
+        tenantId,
+        roomId: table._id,
+        status: 'Checked-In'
+      });
+    } catch (e) {
+      console.warn('HotelBooking lookup error:', e);
+    }
+
+    const isHotelRoom = table.isRoom || Boolean(activeBooking);
+    if (isHotelRoom && !table.isRoom) {
+      table.isRoom = true;
+    }
+
+    const resolvedOrderType = orderType || (isHotelRoom ? 'Room-Service' : 'Dine-in');
+    const resolvedPaymentOption = paymentOption || (isHotelRoom ? 'Charge-To-Room' : 'Direct-Pay');
+    const roomNumber = table.tableName || `Room ${table.tableNumber}`;
+    const finalCustomerName = (customerName && customerName.trim()) 
+      ? customerName.trim() 
+      : (activeBooking?.guestName || table.currentGuestName || '');
+    const finalCustomerPhone = (customerPhone && customerPhone.trim()) 
+      ? customerPhone.trim() 
+      : (activeBooking?.guestPhone || table.currentGuestPhone || '');
 
     const order = new RestaurantOrder({
       tenantId,
@@ -326,9 +350,9 @@ exports.placeOrder = async (req, res) => {
       items: formattedItems,
       orderType: resolvedOrderType,
       paymentOption: resolvedPaymentOption,
-      roomNumber,
-      customerName: customerName || '',
-      customerPhone: customerPhone || '',
+      roomNumber: isHotelRoom ? roomNumber : '',
+      customerName: finalCustomerName,
+      customerPhone: finalCustomerPhone,
       notes: notes || '',
       totalAmount,
       status: 'Received'
@@ -337,9 +361,9 @@ exports.placeOrder = async (req, res) => {
     await order.save();
 
     // Auto Save / Create Customer in DB for this Tenant
-    if (customerPhone && customerPhone.trim()) {
-      const cleanPhone = customerPhone.trim();
-      const cleanName = (customerName && customerName.trim()) ? customerName.trim() : 'Guest';
+    if (finalCustomerPhone && finalCustomerPhone.trim()) {
+      const cleanPhone = finalCustomerPhone.trim();
+      const cleanName = (finalCustomerName && finalCustomerName.trim()) ? finalCustomerName.trim() : 'Guest';
       try {
         let existingCust = await Customer.findOne({ userId: tenantId, phone: cleanPhone });
         if (!existingCust) {
@@ -358,40 +382,43 @@ exports.placeOrder = async (req, res) => {
       }
     }
     
-    // Update table status to Ordering
-    table.status = 'Ordering';
-    await table.save();
-
-    // If it's a room and there is an active HotelBooking, attach food order to room folio
-    if (table.isRoom) {
+    // If there is an active HotelBooking, attach food order to room folio & preserve room status
+    if (activeBooking) {
       try {
-        const HotelBooking = require('../models/HotelBooking');
-        const activeBooking = await HotelBooking.findOne({
-          tenantId,
-          roomId: table._id,
-          status: 'Checked-In'
+        const Product = require('../models/Product');
+        const prodIds = formattedItems.map(i => i.product);
+        const prods = await Product.find({ _id: { $in: prodIds } });
+        const prodMap = {};
+        prods.forEach(p => { prodMap[p._id.toString()] = p.name; });
+
+        const itemsSummary = formattedItems
+          .map(item => `${item.quantity}x ${prodMap[item.product?.toString()] || 'Item'}`)
+          .join(', ');
+
+        activeBooking.foodOrders.push({
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          amount: totalAmount,
+          date: new Date(),
+          itemsSummary: itemsSummary || `${formattedItems.length} items`
         });
+        await activeBooking.save();
 
-        if (activeBooking) {
-          const itemsSummary = (formattedItems || [])
-            .map(item => `${item.quantity}x Item`)
-            .join(', ');
-
-          activeBooking.foodOrders.push({
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            amount: totalAmount,
-            date: new Date(),
-            itemsSummary: itemsSummary
-          });
-          await activeBooking.save();
-
-          const io = getIO();
-          io.to(`tenant_${tenantId.toString()}`).emit('hotel_booking_updated', activeBooking);
+        table.status = 'Occupied';
+        if (!table.currentGuestName && activeBooking.guestName) {
+          table.currentGuestName = activeBooking.guestName;
+          table.currentGuestPhone = activeBooking.guestPhone;
         }
+        await table.save();
+
+        const io = getIO();
+        io.to(`tenant_${tenantId.toString()}`).emit('hotel_booking_updated', activeBooking);
       } catch (hbErr) {
         console.warn('Could not attach order to active HotelBooking:', hbErr);
       }
+    } else {
+      table.status = 'Ordering';
+      await table.save();
     }
 
     // Populate items for frontend

@@ -15,6 +15,8 @@ router.put('/guests/:id', protect, hotelBookingController.updateHotelGuest);
 
 router.get('/:id', protect, hotelBookingController.getBookingDetails);
 router.post('/:id/extra-charge', protect, hotelBookingController.addExtraCharge);
+router.post('/:id/payment', protect, hotelBookingController.addPayment);
+router.delete('/:id/food-order/:orderId', protect, hotelBookingController.deleteFoodOrder);
 router.post('/:id/check-out', protect, hotelBookingController.checkOutGuest);
 router.put('/room/:roomId/clean', protect, hotelBookingController.markRoomClean);
 

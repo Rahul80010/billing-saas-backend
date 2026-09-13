@@ -1,9 +1,19 @@
 const HotelBooking = require('../models/HotelBooking');
 const RestaurantTable = require('../models/RestaurantTable');
 const RestaurantOrder = require('../models/RestaurantOrder');
+const Product = require('../models/Product');
 const Customer = require('../models/Customer');
 const User = require('../models/User');
 const { getIO } = require('../services/socketService');
+
+const safeEmit = (channel, event, data) => {
+  try {
+    const io = getIO();
+    if (io) io.to(channel).emit(event, data);
+  } catch (err) {
+    // Socket emit fallback
+  }
+};
 
 // Check In Guest
 exports.checkInGuest = async (req, res) => {
@@ -147,15 +157,69 @@ exports.checkInGuest = async (req, res) => {
     }
 
     // Emit WebSocket update
-    const io = getIO();
     const strTenant = tenantId.toString();
-    io.to(`tenant_${strTenant}`).emit('table_updated', room);
-    io.to(`tenant_${strTenant}`).emit('hotel_booking_created', booking);
+    safeEmit(`tenant_${strTenant}`, 'table_updated', room);
+    safeEmit(`tenant_${strTenant}`, 'hotel_booking_created', booking);
 
     res.status(201).json(booking);
   } catch (error) {
     console.error('checkInGuest error:', error);
     res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// Helper to dynamically reconcile and sync all RestaurantOrder records for a room during booking period
+const reconcileBookingFoodOrders = async (booking) => {
+  try {
+    const tenantId = booking.tenantId;
+    const roomId = booking.roomId?._id || booking.roomId;
+    if (!roomId) return;
+
+    const query = {
+      tenantId,
+      tableId: roomId,
+      createdAt: {
+        $gte: new Date(booking.checkInDate),
+        ...(booking.actualCheckOutDate ? { $lte: new Date(booking.actualCheckOutDate) } : {})
+      },
+      status: { $nin: ['Cancelled', 'Rejected'] }
+    };
+
+    const orders = await RestaurantOrder.find(query).populate('items.product');
+
+    let modified = false;
+    if (!Array.isArray(booking.foodOrders)) {
+      booking.foodOrders = [];
+      modified = true;
+    }
+
+    const existingOrderIds = new Set(
+      booking.foodOrders.map(f => f.orderId ? f.orderId.toString() : (f._id ? f._id.toString() : ''))
+    );
+
+    for (const ord of orders) {
+      if (!existingOrderIds.has(ord._id.toString())) {
+        const itemsSummary = (ord.items || [])
+          .map(item => `${item.quantity}x ${item.product?.name || 'Item'}`)
+          .join(', ');
+
+        booking.foodOrders.push({
+          orderId: ord._id,
+          orderNumber: ord.orderNumber,
+          amount: ord.totalAmount,
+          date: ord.createdAt,
+          itemsSummary: itemsSummary || `${ord.items?.length || 1} items`
+        });
+        existingOrderIds.add(ord._id.toString());
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      await booking.save();
+    }
+  } catch (err) {
+    console.warn('reconcileBookingFoodOrders warning:', err);
   }
 };
 
@@ -167,9 +231,10 @@ exports.getActiveBookings = async (req, res) => {
       .populate('roomId')
       .sort({ checkInDate: -1 });
 
-    // Calculate live stay durations & live running balances
+    // Reconcile and calculate live stay durations & live running balances
     const now = new Date();
-    const liveBookings = bookings.map(b => {
+    const liveBookings = await Promise.all(bookings.map(async b => {
+      await reconcileBookingFoodOrders(b);
       const bObj = b.toObject();
       const checkIn = new Date(bObj.checkInDate);
       const diffMs = now.getTime() - checkIn.getTime();
@@ -193,7 +258,7 @@ exports.getActiveBookings = async (req, res) => {
         totalPaid,
         liveBalance
       };
-    });
+    }));
 
     res.json(liveBookings);
   } catch (error) {
@@ -202,12 +267,37 @@ exports.getActiveBookings = async (req, res) => {
   }
 };
 
-// Get Single Booking Details
+// Get Single Booking Details with live calculations
 exports.getBookingDetails = async (req, res) => {
   try {
     const booking = await HotelBooking.findOne({ _id: req.params.id, tenantId: req.user.id }).populate('roomId');
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    res.json(booking);
+    await reconcileBookingFoodOrders(booking);
+
+    const bObj = booking.toObject();
+    const now = new Date();
+    const checkIn = new Date(bObj.checkInDate);
+    const diffMs = now.getTime() - checkIn.getTime();
+    const rawNights = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const currentNights = Math.max(1, rawNights);
+
+    const roomCharges = currentNights * bObj.roomRatePerNight;
+    const foodTotal = (bObj.foodOrders || []).reduce((acc, f) => acc + (f.amount || 0), 0);
+    const extraTotal = (bObj.extraServices || []).reduce((acc, s) => acc + (s.amount || 0), 0);
+    const currentGrandTotal = roomCharges + foodTotal + extraTotal;
+    const totalPaid = (bObj.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0) || bObj.advancePayment || 0;
+    const liveBalance = Math.max(0, currentGrandTotal - totalPaid);
+
+    res.json({
+      ...bObj,
+      currentNights,
+      currentRoomCharges: roomCharges,
+      currentFoodTotal: foodTotal,
+      currentExtraTotal: extraTotal,
+      currentGrandTotal,
+      totalPaid,
+      liveBalance
+    });
   } catch (error) {
     console.error('getBookingDetails error:', error);
     res.status(500).json({ message: 'Server Error' });
@@ -236,14 +326,86 @@ exports.addExtraCharge = async (req, res) => {
     });
 
     await booking.save();
-
-    const io = getIO();
-    io.to(`tenant_${req.user.id}`).emit('hotel_booking_updated', booking);
+    safeEmit(`tenant_${req.user.id}`, 'hotel_booking_updated', booking);
 
     res.json(booking);
   } catch (error) {
     console.error('addExtraCharge error:', error);
     res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+// Record an Interim / Partial Payment during stay
+exports.addPayment = async (req, res) => {
+  try {
+    const tenantId = req.user.id;
+    const { amount, paymentMethod, notes } = req.body;
+    const paymentAmt = Number(amount);
+
+    if (!paymentAmt || paymentAmt <= 0) {
+      return res.status(400).json({ message: 'A valid positive payment amount is required' });
+    }
+
+    const booking = await HotelBooking.findOne({ _id: req.params.id, tenantId }).populate('roomId');
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+
+    await reconcileBookingFoodOrders(booking);
+
+    if (!Array.isArray(booking.payments)) {
+      booking.payments = [];
+    }
+
+    booking.payments.push({
+      amount: paymentAmt,
+      paymentMethod: paymentMethod || 'Cash',
+      paidAt: new Date(),
+      notes: (notes || 'Interim Payment Received').trim()
+    });
+
+    // Recalculate totals
+    const now = new Date();
+    const checkIn = new Date(booking.checkInDate);
+    const diffMs = now.getTime() - checkIn.getTime();
+    const currentNights = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+    const roomCharges = currentNights * booking.roomRatePerNight;
+    const foodTotal = (booking.foodOrders || []).reduce((acc, f) => acc + (f.amount || 0), 0);
+    const extraTotal = (booking.extraServices || []).reduce((acc, s) => acc + (s.amount || 0), 0);
+    const currentGrandTotal = roomCharges + foodTotal + extraTotal;
+    const totalPaid = (booking.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
+
+    booking.balanceDue = Math.max(0, currentGrandTotal - totalPaid);
+    booking.paymentStatus = totalPaid >= currentGrandTotal ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+
+    await booking.save();
+    safeEmit(`tenant_${tenantId.toString()}`, 'hotel_booking_updated', booking);
+
+    res.json(booking);
+  } catch (error) {
+    console.error('addPayment error:', error);
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// Remove Food Order from Folio
+exports.deleteFoodOrder = async (req, res) => {
+  try {
+    const tenantId = req.user.id;
+    const { id, orderId } = req.params;
+
+    const booking = await HotelBooking.findOne({ _id: id, tenantId }).populate('roomId');
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+
+    booking.foodOrders = (booking.foodOrders || []).filter(
+      f => f._id.toString() !== orderId && f.orderId?.toString() !== orderId
+    );
+
+    await booking.save();
+    safeEmit(`tenant_${tenantId.toString()}`, 'hotel_booking_updated', booking);
+
+    res.json(booking);
+  } catch (error) {
+    console.error('deleteFoodOrder error:', error);
+    res.status(500).json({ message: error.message || 'Server Error' });
   }
 };
 
@@ -268,6 +430,8 @@ exports.checkOutGuest = async (req, res) => {
     if (booking.status !== 'Checked-In') {
       return res.status(400).json({ message: 'Guest is already checked out' });
     }
+
+    await reconcileBookingFoodOrders(booking);
 
     const actualOut = new Date();
     const nights = Number(totalNights) || 1;
@@ -337,12 +501,11 @@ exports.checkOutGuest = async (req, res) => {
     );
 
     // Emit WebSocket updates
-    const io = getIO();
     const strTenant = tenantId.toString();
     if (room) {
-      io.to(`tenant_${strTenant}`).emit('table_updated', room);
+      safeEmit(`tenant_${strTenant}`, 'table_updated', room);
     }
-    io.to(`tenant_${strTenant}`).emit('hotel_booking_checked_out', booking);
+    safeEmit(`tenant_${strTenant}`, 'hotel_booking_checked_out', booking);
 
     res.json(booking);
   } catch (error) {
