@@ -53,6 +53,15 @@ const hotelBookingSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  guestGender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other', ''],
+    default: '',
+  },
+  guestAge: {
+    type: Number,
+    default: null,
+  },
   idProofType: {
     type: String,
     enum: ['Aadhaar Card', 'Passport', 'Driving License', 'Voter ID', 'Govt ID', 'PAN Card', 'Other'],
