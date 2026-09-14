@@ -543,7 +543,13 @@ exports.getBookingHistory = async (req, res) => {
         { guestName: regex },
         { guestPhone: regex },
         { bookingNumber: regex },
-        { roomName: regex }
+        { roomName: regex },
+        { idProofNumber: regex },
+        { guestEmail: regex },
+        { guestAddress: regex },
+        { 'additionalGuests.name': regex },
+        { 'additionalGuests.phone': regex },
+        { 'additionalGuests.idProofNumber': regex }
       ];
     }
 
