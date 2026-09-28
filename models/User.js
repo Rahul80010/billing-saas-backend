@@ -29,6 +29,18 @@ const userSchema = new mongoose.Schema({
   otpExpires: {
     type: Date,
   },
+  lastOtpSentAt: {
+    type: Date,
+  },
+  otpRequestCount: {
+    type: Number,
+    default: 0,
+  },
+  role: {
+    type: String,
+    enum: ['owner', 'manager', 'cashier', 'waiter', 'kitchen'],
+    default: 'owner',
+  },
   resetPasswordOtp: {
     type: String,
   },

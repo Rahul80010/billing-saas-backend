@@ -12,9 +12,10 @@ const {
   logPurchase,
   generateAiInsights
 } = require('../controllers/reportController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
 router.use(protect);
+router.use(authorize('owner', 'manager'));
 
 router.get('/dashboard', getReportDashboard);
 router.get('/sales', getSalesReport);

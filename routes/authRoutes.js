@@ -11,7 +11,7 @@ const {
   updateProfile,
   testWhatsapp,
 } = require('../controllers/authController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, admin } = require('../middleware/authMiddleware');
 
 router.post('/register', registerUser);
 router.post('/login', loginUser);
@@ -23,8 +23,8 @@ router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.post('/test-whatsapp', protect, testWhatsapp);
 
-// Safe debugging route to check live environment variable mapping
-router.get('/debug-smtp', (req, res) => {
+// Secure debugging route to check live environment variable mapping (Admin only)
+router.get('/debug-smtp', protect, admin, (req, res) => {
   res.json({
     smtp_host: process.env.SMTP_HOST || 'not defined',
     smtp_port: process.env.SMTP_PORT || 'not defined',
@@ -38,8 +38,8 @@ router.get('/debug-smtp', (req, res) => {
   });
 });
 
-// Diagnostic route to synchronously test email sending and catch SMTP errors
-router.post('/test-email', async (req, res) => {
+// Diagnostic route to test email sending (Admin only)
+router.post('/test-email', protect, admin, async (req, res) => {
   const { email, host: overrideHost, port: overridePort, user: overrideUser, pass: overridePass } = req.body;
   if (!email) {
     return res.status(400).json({ error: 'Please provide a target email address' });

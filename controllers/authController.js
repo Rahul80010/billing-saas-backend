@@ -174,20 +174,50 @@ const resendOtp = async (req, res) => {
       return res.status(400).json({ message: 'Please provide email' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase(), isVerified: false });
+    const user = await User.findOne({ email: email.toLowerCase() });
 
-    if (!user) {
-      return res.status(400).json({ message: 'User not found or already verified' });
+    // If user does not exist or is already verified, return generic success message to prevent account enumeration
+    if (!user || user.isVerified) {
+      return res.status(200).json({
+        message: 'If an unverified account exists with this email, a new OTP has been dispatched.',
+      });
+    }
+
+    const now = Date.now();
+    const cooldownMs = 60 * 1000; // 60-second cooldown
+    const hourMs = 60 * 60 * 1000;
+
+    // Check 60-second cooldown
+    if (user.lastOtpSentAt && (now - new Date(user.lastOtpSentAt).getTime()) < cooldownMs) {
+      const waitSeconds = Math.ceil((cooldownMs - (now - new Date(user.lastOtpSentAt).getTime())) / 1000);
+      return res.status(429).json({
+        message: `Please wait ${waitSeconds} seconds before requesting a new OTP.`,
+      });
+    }
+
+    // Check hourly limit (max 5 requests per hour)
+    if (user.lastOtpSentAt && (now - new Date(user.lastOtpSentAt).getTime()) < hourMs) {
+      if ((user.otpRequestCount || 0) >= 5) {
+        return res.status(429).json({
+          message: 'Too many OTP requests. Please try again after 1 hour.',
+        });
+      }
+      user.otpRequestCount = (user.otpRequestCount || 0) + 1;
+    } else {
+      user.otpRequestCount = 1;
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    user.lastOtpSentAt = new Date();
     await user.save();
 
     sendOtpEmail(user.email, otp);
 
-    res.status(200).json({ message: 'OTP resent successfully' });
+    res.status(200).json({
+      message: 'If an unverified account exists with this email, a new OTP has been dispatched.',
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

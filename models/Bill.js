@@ -127,6 +127,12 @@ const billSchema = new mongoose.Schema({
       default: Date.now,
     },
   }],
+  idempotencyKey: {
+    type: String,
+    trim: true,
+    index: true,
+    sparse: true,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Bill', billSchema);

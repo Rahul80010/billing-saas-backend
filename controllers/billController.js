@@ -3,6 +3,8 @@ const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
 const { sendWhatsappBill, sendWhatsAppMessage, formatPhoneNumber, uploadWhatsAppMedia } = require('../services/whatsappService');
 const { generateInvoicePdf } = require('../services/pdfService');
+const mongoose = require('mongoose');
+const { generateInvoiceSignature, verifyInvoiceSignature } = require('../utils/signedUrl');
 const WhatsAppConnection = require('../models/WhatsAppConnection');
 const { decrypt } = require('../services/encryptionService');
 const { generateUpiUri, generateQrBuffer } = require('../services/qrService');
@@ -50,10 +52,22 @@ const getBills = async (req, res) => {
 // @route   POST /api/bills
 // @access  Private
 const createBill = async (req, res) => {
-  const { customerName, customerPhone, customerAddress, items, paymentType, dueDate, paidAmount } = req.body;
+  const { customerName, customerPhone, customerAddress, items, paymentType, dueDate, paidAmount, idempotencyKey } = req.body;
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: 'No valid bill items provided' });
+  }
+
+  // Idempotency check to prevent duplicate bills on offline sync retries
+  if (idempotencyKey) {
+    try {
+      const existingBill = await Bill.findOne({ userId: req.user._id, idempotencyKey });
+      if (existingBill) {
+        return res.status(200).json(existingBill);
+      }
+    } catch (e) {
+      console.warn('Idempotency check query failed, proceeding with creation:', e);
+    }
   }
 
   try {
@@ -62,12 +76,30 @@ const createBill = async (req, res) => {
     const processedItems = [];
 
     for (const item of items) {
-      const price = Number(item.price);
-      const quantity = Number(item.quantity);
-      const gst = Number(item.gst);
+      let price = Number(item.price);
+      let quantity = Number(item.quantity);
+      let gst = Number(item.gst);
 
-      if (!item.productName || isNaN(price) || price < 0 || isNaN(quantity) || quantity < 0 || isNaN(gst) || gst < 0) {
+      if (!item.productName || isNaN(price) || price < 0 || isNaN(quantity) || quantity <= 0 || isNaN(gst) || gst < 0) {
         throw new Error(`Invalid or missing fields for item: ${item.productName || 'Unknown'}`);
+      }
+
+      // Authoritative server-side price check against database to prevent client-side tampering
+      try {
+        if (item.variantId && mongoose.Types.ObjectId.isValid(item.variantId)) {
+          const v = await ProductVariant.findOne({ _id: item.variantId, userId: req.user._id });
+          if (v && typeof v.price === 'number') {
+            price = v.price;
+          }
+        } else if ((item.product || item.productId) && mongoose.Types.ObjectId.isValid(item.product || item.productId)) {
+          const p = await Product.findOne({ _id: item.product || item.productId, userId: req.user._id });
+          if (p && typeof p.price === 'number') {
+            price = p.price;
+            if (typeof p.gst === 'number') gst = p.gst;
+          }
+        }
+      } catch (dbPriceErr) {
+        console.warn('Failed to verify item price against DB, using provided price:', dbPriceErr);
       }
 
       // Calculate item total: (price * quantity) + gst amount
@@ -150,7 +182,8 @@ const createBill = async (req, res) => {
       paidAmount: finalPaidAmount,
       remainingAmount: finalRemainingAmount,
       status: finalStatus,
-      payments: billPayments
+      payments: billPayments,
+      idempotencyKey: idempotencyKey || null
     });
 
     const createdBill = await bill.save();
@@ -239,7 +272,8 @@ const createBill = async (req, res) => {
     if (customerPhone) {
       const businessName = req.user.businessName || req.user.name;
       const frontendUrl = process.env.FRONTEND_URL || 'https://mohuri.detalogy.com';
-      const pdfLink = `${frontendUrl}/api/invoice/pdf/${createdBill._id}`;
+      const sigData = generateInvoiceSignature(createdBill._id.toString(), process.env.JWT_SECRET || 'mohuri_jwt_fallback_secret');
+      const pdfLink = `${frontendUrl}/api/invoice/pdf/${createdBill._id}${sigData.query}`;
       const userConfig = {
         whatsappToken: req.user.whatsappToken,
         whatsappPhoneNumberId: req.user.whatsappPhoneNumberId,
@@ -258,14 +292,36 @@ const createBill = async (req, res) => {
   }
 };
 
-// @desc    Get dynamic PDF invoice for a bill
+// @desc    Get dynamic PDF invoice for a bill (Protected with JWT or HMAC Signed Link)
 // @route   GET /api/bills/:id/pdf
-// @access  Public
+// @access  Protected / Signed Public
 const getBillPdf = async (req, res) => {
   try {
-    const bill = await Bill.findById(req.params.id).populate('userId');
+    const { id } = req.params;
+    const { expires, sig } = req.query;
+
+    // Enforce Authorization check before hitting the database:
+    if (!req.user) {
+      if (!sig || !expires) {
+        return res.status(401).json({ message: 'Unauthorized: Authentication token or signed invoice link required' });
+      }
+      const isSigValid = verifyInvoiceSignature(id, expires, sig);
+      if (!isSigValid) {
+        return res.status(403).json({ message: 'Forbidden: Invalid or expired signed invoice link' });
+      }
+    }
+
+    const bill = await Bill.findById(id).populate('userId');
     if (!bill) {
       return res.status(404).json({ message: 'Bill not found' });
+    }
+
+    // Authenticated merchant request: enforce strict tenant ownership
+    if (req.user) {
+      const isOwner = bill.userId && bill.userId._id.toString() === req.user._id.toString();
+      if (!isOwner && !req.user.isAdmin) {
+        return res.status(403).json({ message: 'Forbidden: You do not have access to this invoice' });
+      }
     }
 
     const businessConfig = {

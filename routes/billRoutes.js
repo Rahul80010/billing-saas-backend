@@ -14,10 +14,10 @@ const {
   updateCustomerReminderDate,
   parseVoiceBill,
 } = require('../controllers/billController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, optionalProtect, authorize } = require('../middleware/authMiddleware');
 
-// Public route for dynamic PDF download
-router.get('/:id/pdf', getBillPdf);
+// Protected/HMAC-signed route for dynamic PDF download
+router.get('/:id/pdf', optionalProtect, getBillPdf);
 
 // Protect all other routes
 router.use(protect);
@@ -32,6 +32,6 @@ router.post('/:id/whatsapp-reminder', sendBillWhatsAppReminder);
 router.put('/:id/reminder-date', updateBillReminderDate);
 
 router.route('/').get(getBills).post(createBill);
-router.route('/:id').delete(deleteBill);
+router.route('/:id').delete(authorize('owner', 'manager'), deleteBill);
 
 module.exports = router;

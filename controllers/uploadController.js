@@ -128,10 +128,124 @@ const uploadImage = async (req, res) => {
   }
 };
 
+const dns = require('dns').promises;
+const net = require('net');
+
+/**
+ * Checks whether an IP address is private, loopback, link-local, or otherwise reserved.
+ */
+const isPrivateOrBlockedIp = (ip) => {
+  if (!ip) return true;
+
+  // Handle IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1)
+  if (ip.startsWith('::ffff:')) {
+    ip = ip.substring(7);
+  }
+
+  if (net.isIPv4(ip)) {
+    const parts = ip.split('.').map(Number);
+    if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) {
+      return true;
+    }
+    // 0.0.0.0/8 (Current network)
+    if (parts[0] === 0) return true;
+    // 127.0.0.0/8 (Loopback)
+    if (parts[0] === 127) return true;
+    // 10.0.0.0/8 (Private RFC 1918)
+    if (parts[0] === 10) return true;
+    // 172.16.0.0/12 (Private RFC 1918: 172.16 - 172.31)
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    // 192.168.0.0/16 (Private RFC 1918)
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    // 169.254.0.0/16 (Link-local / Cloud Metadata: 169.254.169.254)
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    // 100.64.0.0/10 (Carrier-grade NAT)
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
+    // 192.0.0.0/24, 192.0.2.0/24 (Documentation/Reserved)
+    if (parts[0] === 192 && parts[1] === 0 && (parts[2] === 0 || parts[2] === 2)) return true;
+    // 198.18.0.0/15 (Benchmark)
+    if (parts[0] === 198 && parts[1] >= 18 && parts[1] <= 19) return true;
+    // 198.51.100.0/24, 203.0.113.0/24
+    if (parts[0] === 198 && parts[1] === 51 && parts[2] === 100) return true;
+    if (parts[0] === 203 && parts[1] === 0 && parts[2] === 113) return true;
+    // 224.0.0.0/4 (Multicast) & 240.0.0.0/4 (Reserved)
+    if (parts[0] >= 224) return true;
+
+    return false;
+  }
+
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase();
+    // Loopback ::1, Unspecified ::
+    if (lower === '::1' || lower === '::') return true;
+    // Unique Local: fc00::/7 (fc00 - fdff)
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
+    // Link Local: fe80::/10 (fe80 - febf)
+    if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true;
+
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Validates a target URL against SSRF vulnerabilities (blocks loopback, cloud metadata, RFC 1918).
+ */
+const validateSafeUrl = async (targetUrl) => {
+  let parsed;
+  try {
+    parsed = new URL(targetUrl);
+  } catch (e) {
+    throw new Error('Invalid URL format');
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Disallowed protocol. Only HTTP and HTTPS are permitted.');
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal')
+  ) {
+    throw new Error('Disallowed host: target resolves to a local or internal domain.');
+  }
+
+  if (net.isIP(hostname)) {
+    if (isPrivateOrBlockedIp(hostname)) {
+      throw new Error('Disallowed destination IP address: Private, loopback, or metadata addresses are prohibited.');
+    }
+  } else {
+    let records;
+    try {
+      records = await dns.lookup(hostname, { all: true });
+    } catch (dnsErr) {
+      throw new Error(`DNS resolution failed for host: ${hostname}`);
+    }
+
+    if (!records || records.length === 0) {
+      throw new Error(`No IP addresses found for host: ${hostname}`);
+    }
+
+    for (const record of records) {
+      if (isPrivateOrBlockedIp(record.address)) {
+        throw new Error(`Disallowed host: ${hostname} resolves to restricted IP ${record.address}`);
+      }
+    }
+  }
+
+  return parsed;
+};
+
 /**
  * Helper to fetch image buffer from any URL, automatically handling webpage open-graph scraping and browser user agents.
  */
 const fetchImageBufferFromAnyUrl = async (targetUrl) => {
+  await validateSafeUrl(targetUrl);
+
   const browserHeaders = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
@@ -142,9 +256,10 @@ const fetchImageBufferFromAnyUrl = async (targetUrl) => {
   try {
     response = await axios.get(targetUrl, {
       responseType: 'arraybuffer',
-      timeout: 15000,
-      maxContentLength: 15 * 1024 * 1024,
-      headers: browserHeaders
+      timeout: 8000,
+      maxContentLength: 8 * 1024 * 1024,
+      headers: browserHeaders,
+      maxRedirects: 3,
     });
   } catch (err) {
     throw new Error(`Could not fetch URL: ${err.message}`);
@@ -199,12 +314,16 @@ const fetchImageBufferFromAnyUrl = async (targetUrl) => {
     extractedImageSrc = new URL(extractedImageSrc, targetUrl).href;
   } catch (_) {}
 
+  // Validate the extracted scraped image URL against SSRF as well
+  await validateSafeUrl(extractedImageSrc);
+
   // Now fetch the actual extracted image
   const imgResponse = await axios.get(extractedImageSrc, {
     responseType: 'arraybuffer',
-    timeout: 15000,
-    maxContentLength: 15 * 1024 * 1024,
-    headers: browserHeaders
+    timeout: 8000,
+    maxContentLength: 8 * 1024 * 1024,
+    headers: browserHeaders,
+    maxRedirects: 3,
   });
 
   const imgBuffer = Buffer.from(imgResponse.data);
@@ -302,10 +421,36 @@ const uploadImageFromUrl = async (req, res) => {
  */
 const deleteImage = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user._id.toString();
+    const isAdmin = req.user.isAdmin;
     const { image } = req.body;
     if (!image) {
       return res.status(400).json({ message: 'No image target provided.' });
+    }
+
+    // Helper to parse key
+    const parseKey = (targetUrl) => {
+      if (!targetUrl || typeof targetUrl !== 'string' || targetUrl.startsWith('data:')) return null;
+      try {
+        if (targetUrl.includes('/uploads/')) {
+          return targetUrl.split('/uploads/')[1];
+        }
+        const parsed = new URL(targetUrl);
+        return parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname;
+      } catch (_) {
+        return targetUrl;
+      }
+    };
+
+    const targetUrl = typeof image === 'object' ? (image.url || image.thumbnail) : image;
+    const key = parseKey(targetUrl);
+
+    // Enforce tenant isolation: merchants can only delete assets from their own tenant directory
+    if (!isAdmin && key) {
+      const expectedPrefix = `tenant_${userId}/`;
+      if (!key.startsWith(expectedPrefix)) {
+        return res.status(403).json({ message: 'Forbidden: You are not authorized to delete another tenant\'s assets.' });
+      }
     }
 
     await deleteImageFromStorage(image);
@@ -508,5 +653,7 @@ module.exports = {
   deleteImage,
   getStorageStats,
   migrateBase64Images,
-  fetchImageBufferFromAnyUrl
+  fetchImageBufferFromAnyUrl,
+  validateSafeUrl,
+  isPrivateOrBlockedIp
 };

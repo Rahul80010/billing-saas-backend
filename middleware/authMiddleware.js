@@ -58,4 +58,17 @@ const admin = (req, res, next) => {
   }
 };
 
-module.exports = { protect, optionalProtect, admin };
+const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Not authorized' });
+    }
+    const userRole = req.user.role || (req.user.isAdmin ? 'owner' : 'owner');
+    if (req.user.isAdmin || userRole === 'owner' || roles.includes(userRole)) {
+      return next();
+    }
+    return res.status(403).json({ message: `Access denied. Role '${userRole}' is not authorized to perform this action.` });
+  };
+};
+
+module.exports = { protect, optionalProtect, admin, authorize };
