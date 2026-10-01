@@ -4,6 +4,7 @@ const Customer = require('../models/Customer');
 const Supplier = require('../models/Supplier');
 const Purchase = require('../models/Purchase');
 const Expense = require('../models/Expense');
+const ProductVariant = require('../models/ProductVariant');
 const axios = require('axios');
 
 // Helper function to calculate date bounds based on timeframe
@@ -492,13 +493,24 @@ const logPurchase = async (req, res) => {
   try {
     const { supplierId, items, total, paidAmount, remainingAmount, status, date, updateInventory } = req.body;
 
+    const mongoose = require('mongoose');
     if (!supplierId || !total) {
       return res.status(400).json({ message: 'Supplier ID and Total amount are required.' });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(supplierId)) {
+      return res.status(400).json({ message: 'Invalid supplier selected. Please select a valid supplier.' });
+    }
+
     const supplier = await Supplier.findOne({ _id: supplierId, userId: req.user._id });
     if (!supplier) {
-      return res.status(404).json({ message: 'Supplier not found' });
+      return res.status(404).json({ message: 'Supplier not found.' });
+    }
+
+    let purchaseStatus = status || 'paid';
+    if (purchaseStatus === 'unpaid') purchaseStatus = 'pending';
+    if (!['paid', 'pending', 'partial', 'unpaid'].includes(purchaseStatus)) {
+      purchaseStatus = 'pending';
     }
 
     const newPurchase = await Purchase.create({
@@ -509,25 +521,100 @@ const logPurchase = async (req, res) => {
       total: Number(total),
       paidAmount: Number(paidAmount || 0),
       remainingAmount: Number(remainingAmount || 0),
-      status: status || 'paid',
+      status: purchaseStatus,
       purchaseDate: date ? new Date(date) : new Date()
     });
 
     // Update supplier outstanding balance
     if (newPurchase.remainingAmount > 0) {
-      supplier.outstandingBalance += newPurchase.remainingAmount;
+      supplier.outstandingBalance = (supplier.outstandingBalance || 0) + newPurchase.remainingAmount;
       await supplier.save();
     }
 
-    // Update inventory stock if requested & product exists in database (skip non-existing items)
+    // Update inventory stock & pricing options if requested
     if (updateInventory && items && items.length > 0) {
+      const escapeRegex = (s) => s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
       for (const item of items) {
+        if (!item.productName) continue;
         const product = await Product.findOne({
           userId: req.user._id,
-          name: { $regex: new RegExp(`^${item.productName.trim()}$`, 'i') }
+          name: { $regex: new RegExp(`^${escapeRegex(item.productName.trim())}$`, 'i') }
         });
-        if (product) {
-          product.stock = (product.stock || 0) + Number(item.quantity || 0);
+        if (!product) continue;
+
+        const newQty = Number(item.quantity || 0);
+        const newCost = Number(item.price || 0);
+        const oldStock = Number(product.stock || 0);
+        const oldCost = Number(product.buyingCost || 0);
+        const pricingOption = item.pricingOption || 'keep_price';
+        const newSellingPrice = Number(item.newSellingPrice || product.price);
+
+        if (pricingOption === 'create_variant' && newSellingPrice > 0) {
+          // Option 3: Separate Old & New Stock into Variants
+          const existingVariants = await ProductVariant.find({
+            productId: product._id,
+            userId: req.user._id,
+          });
+
+          if (existingVariants.length === 0) {
+            // Convert current single product into 2 variants: Old Stock and New Stock
+            if (oldStock > 0) {
+              await ProductVariant.create({
+                productId: product._id,
+                userId: req.user._id,
+                variantName: `Old Stock (₹${product.price})`,
+                price: product.price,
+                buyingCost: oldCost,
+                stock: oldStock,
+              });
+            }
+            await ProductVariant.create({
+              productId: product._id,
+              userId: req.user._id,
+              variantName: `New Stock (₹${newSellingPrice})`,
+              price: newSellingPrice,
+              buyingCost: newCost,
+              stock: newQty,
+            });
+          } else {
+            // Already has variants: check if variant with same selling price exists
+            const matchedVar = existingVariants.find((v) => Number(v.price) === newSellingPrice);
+            if (matchedVar) {
+              matchedVar.stock = (matchedVar.stock || 0) + newQty;
+              if (newCost > 0) matchedVar.buyingCost = newCost;
+              await matchedVar.save();
+            } else {
+              await ProductVariant.create({
+                productId: product._id,
+                userId: req.user._id,
+                variantName: `New Stock (₹${newSellingPrice})`,
+                price: newSellingPrice,
+                buyingCost: newCost,
+                stock: newQty,
+              });
+            }
+          }
+          // Product overall stock is the sum of old stock + new quantity
+          product.stock = oldStock + newQty;
+          await product.save();
+        } else if (pricingOption === 'update_price' && newSellingPrice > 0) {
+          // Option 2: Update overall product selling price to new selling price
+          if (oldStock + newQty > 0) {
+            product.buyingCost = Math.round(((oldStock * oldCost) + (newQty * newCost)) / (oldStock + newQty) * 100) / 100;
+          } else {
+            product.buyingCost = newCost;
+          }
+          product.price = newSellingPrice;
+          product.stock = oldStock + newQty;
+          await product.save();
+        } else {
+          // Option 1: Keep current selling price, update weighted average buying cost
+          if (oldStock + newQty > 0) {
+            product.buyingCost = Math.round(((oldStock * oldCost) + (newQty * newCost)) / (oldStock + newQty) * 100) / 100;
+          } else {
+            product.buyingCost = newCost;
+          }
+          product.stock = oldStock + newQty;
           await product.save();
         }
       }

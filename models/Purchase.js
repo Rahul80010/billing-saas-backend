@@ -20,6 +20,15 @@ const purchaseItemSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  pricingOption: {
+    type: String,
+    enum: ['keep_price', 'update_price', 'create_variant'],
+    default: 'keep_price',
+  },
+  newSellingPrice: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const purchaseSchema = new mongoose.Schema({
@@ -57,7 +66,7 @@ const purchaseSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['paid', 'pending', 'partial'],
+    enum: ['paid', 'pending', 'partial', 'unpaid'],
     default: 'paid',
   },
   purchaseDate: {
