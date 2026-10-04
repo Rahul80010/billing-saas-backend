@@ -22,6 +22,10 @@ const protect = async (req, res, next) => {
         return res.status(401).json({ message: 'Not authorized, user not found' });
       }
 
+      if (req.user.isBlocked) {
+        return res.status(403).json({ message: 'Account is suspended. Please contact support.' });
+      }
+
       next();
     } catch (error) {
       console.error(error);
@@ -42,7 +46,10 @@ const optionalProtect = async (req, res, next) => {
     try {
       const token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
+      const user = await User.findById(decoded.id).select('-password');
+      if (user && !user.isBlocked) {
+        req.user = user;
+      }
     } catch (error) {
       // Ignore token failure for public routes
     }

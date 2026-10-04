@@ -59,6 +59,7 @@ const registerUser = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+    user.otpAttempts = 0;
 
     await user.save();
 
@@ -98,6 +99,7 @@ const loginUser = async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         user.otp = otp;
         user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+        user.otpAttempts = 0;
         await user.save();
 
         sendOtpEmail(user.email, otp);
@@ -141,14 +143,36 @@ const verifyOtp = async (req, res) => {
       return res.status(400).json({ message: 'Invalid request or user already verified' });
     }
 
-    if (user.otp !== otp || user.otpExpires < new Date()) {
-      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    if (!user.otp || !user.otpExpires) {
+      return res.status(400).json({ message: 'No active OTP found. Please request a new OTP.' });
+    }
+
+    if (user.otpExpires < new Date()) {
+      user.otp = undefined;
+      user.otpExpires = undefined;
+      user.otpAttempts = 0;
+      await user.save();
+      return res.status(400).json({ message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    if (user.otp !== otp) {
+      user.otpAttempts = (user.otpAttempts || 0) + 1;
+      if (user.otpAttempts >= 5) {
+        user.otp = undefined;
+        user.otpExpires = undefined;
+        user.otpAttempts = 0;
+        await user.save();
+        return res.status(400).json({ message: 'Too many failed attempts. OTP invalidated. Please request a new OTP.' });
+      }
+      await user.save();
+      return res.status(400).json({ message: `Invalid OTP. ${5 - user.otpAttempts} attempts remaining.` });
     }
 
     // Activate the user
     user.isVerified = true;
     user.otp = undefined;
     user.otpExpires = undefined;
+    user.otpAttempts = 0;
     await user.save();
 
     res.status(200).json({
@@ -183,6 +207,7 @@ const resendOtp = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.otp = otp;
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    user.otpAttempts = 0;
     await user.save();
 
     sendOtpEmail(user.email, otp);
@@ -215,6 +240,7 @@ const forgotPassword = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.resetPasswordOtp = otp;
     user.resetPasswordOtpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+    user.resetOtpAttempts = 0;
 
     await user.save();
 
@@ -251,14 +277,36 @@ const resetPassword = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (user.resetPasswordOtp !== otp || user.resetPasswordOtpExpires < new Date()) {
-      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    if (!user.resetPasswordOtp || !user.resetPasswordOtpExpires) {
+      return res.status(400).json({ message: 'No active password reset OTP. Please request a new one.' });
+    }
+
+    if (user.resetPasswordOtpExpires < new Date()) {
+      user.resetPasswordOtp = undefined;
+      user.resetPasswordOtpExpires = undefined;
+      user.resetOtpAttempts = 0;
+      await user.save();
+      return res.status(400).json({ message: 'Password reset OTP has expired. Please request a new OTP.' });
+    }
+
+    if (user.resetPasswordOtp !== otp) {
+      user.resetOtpAttempts = (user.resetOtpAttempts || 0) + 1;
+      if (user.resetOtpAttempts >= 5) {
+        user.resetPasswordOtp = undefined;
+        user.resetPasswordOtpExpires = undefined;
+        user.resetOtpAttempts = 0;
+        await user.save();
+        return res.status(400).json({ message: 'Too many failed attempts. Reset OTP invalidated. Please request a new one.' });
+      }
+      await user.save();
+      return res.status(400).json({ message: `Invalid OTP. ${5 - user.resetOtpAttempts} attempts remaining.` });
     }
 
     // Reset the password
     user.password = newPassword; // Pre-save hook hashes it automatically!
     user.resetPasswordOtp = undefined;
     user.resetPasswordOtpExpires = undefined;
+    user.resetOtpAttempts = 0;
     await user.save();
 
     res.status(200).json({ message: 'Password reset successful' });

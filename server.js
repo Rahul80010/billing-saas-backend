@@ -10,6 +10,9 @@ const connectDB = require('./config/db');
 const path = require('path');
 const http = require('http');
 
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+
 // Load env vars
 dotenv.config();
 
@@ -23,6 +26,23 @@ const server = http.createServer(app);
 
 // Init Socket.io
 require('./services/socketService').init(server);
+
+// Security Headers Middleware
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
+
+// General API Rate Limiter
+const generalLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 600, // 600 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please slow down.' }
+});
+app.use('/api', generalLimiter);
 
 // Middleware
 app.use(cors());

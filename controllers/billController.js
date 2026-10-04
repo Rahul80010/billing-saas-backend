@@ -99,7 +99,7 @@ const createBill = async (req, res) => {
     let finalDueDate = null;
 
     // Support split payment calculations
-    const inputPaidAmount = paidAmount !== undefined ? Number(paidAmount) : finalTotal;
+    const inputPaidAmount = paidAmount !== undefined ? Number(paidAmount) : (paymentType === 'Credit' ? 0 : finalTotal);
     finalPaidAmount = Math.max(0, inputPaidAmount);
     finalPaidAmount = Math.min(finalPaidAmount, finalTotal);
     finalRemainingAmount = Number((finalTotal - finalPaidAmount).toFixed(2));
@@ -565,7 +565,7 @@ const sendBillWhatsAppReminder = async (req, res) => {
       return res.status(400).json({ message: 'Customer phone number is missing' });
     }
 
-    const customAmountVal = req.body.customAmount !== undefined ? Number(req.body.customAmount) : bill.remainingAmount;
+    const customAmountVal = req.body && req.body.customAmount !== undefined ? Number(req.body.customAmount) : bill.remainingAmount;
     if (isNaN(customAmountVal) || customAmountVal <= 0) {
       return res.status(400).json({ message: 'Invalid custom reminder amount' });
     }
@@ -665,6 +665,7 @@ const sendBillWhatsAppReminder = async (req, res) => {
       message: 'WhatsApp connection not configured. Opening WhatsApp Web link as fallback.'
     });
   } catch (error) {
+    console.error('Error in sendBillWhatsAppReminder:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -699,7 +700,7 @@ const sendCustomerWhatsAppReminder = async (req, res) => {
       }
     });
 
-    const customAmountVal = req.body.customAmount !== undefined ? Number(req.body.customAmount) : totalRemainingDue;
+    const customAmountVal = req.body && req.body.customAmount !== undefined ? Number(req.body.customAmount) : totalRemainingDue;
     if (isNaN(customAmountVal) || customAmountVal <= 0) {
       return res.status(400).json({ message: 'Invalid custom reminder amount' });
     }

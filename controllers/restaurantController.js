@@ -293,23 +293,49 @@ exports.placeOrder = async (req, res) => {
     const table = await RestaurantTable.findOne({ _id: tableId, tenantId });
     if (!table) return res.status(404).json({ message: 'Table not found' });
 
-    // Format items to match Mongoose orderItemSchema
-    const formattedItems = (items || []).map(i => ({
-      product: i.product || i.productId,
-      variant: i.variant || i.variantId || undefined,
-      quantity: Number(i.quantity) || 1,
-      price: Number(i.price) || 0,
-      specialInstructions: i.specialInstructions || i.notes || '',
-    }));
+    // Backend re-validation of product prices & variants against DB
+    const formattedItems = [];
+    let calculatedTotal = 0;
 
-    if (formattedItems.length === 0) {
-      return res.status(400).json({ message: 'Order must contain at least 1 item' });
+    for (const i of (items || [])) {
+      const prodId = i.product || i.productId;
+      const varId = i.variant || i.variantId;
+      const qty = Math.max(1, Number(i.quantity) || 1);
+
+      if (!prodId) continue;
+
+      const dbProduct = await Product.findOne({ _id: prodId, userId: tenantId });
+      if (!dbProduct) {
+        return res.status(400).json({ message: 'One or more items in the order are no longer available.' });
+      }
+
+      let unitPrice = dbProduct.price;
+      let dbVariant = null;
+
+      if (varId) {
+        dbVariant = await ProductVariant.findOne({ _id: varId, productId: dbProduct._id, userId: tenantId });
+        if (dbVariant && dbVariant.status === 'active') {
+          unitPrice = dbVariant.price;
+        }
+      }
+
+      const itemTotal = unitPrice * qty;
+      calculatedTotal += itemTotal;
+
+      formattedItems.push({
+        product: dbProduct._id,
+        variant: dbVariant ? dbVariant._id : undefined,
+        quantity: qty,
+        price: unitPrice,
+        specialInstructions: (i.specialInstructions || i.notes || '').toString().slice(0, 200),
+      });
     }
 
-    // Calculate total if not provided
-    const totalAmount = req.body.totalAmount !== undefined 
-      ? Number(req.body.totalAmount) 
-      : formattedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    if (formattedItems.length === 0) {
+      return res.status(400).json({ message: 'Order must contain at least 1 valid item' });
+    }
+
+    const totalAmount = Number(calculatedTotal.toFixed(2));
 
     // Generate Order Number
     const count = await RestaurantOrder.countDocuments({ tenantId });

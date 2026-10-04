@@ -85,7 +85,7 @@ const uploadImage = async (req, res) => {
     // 4. If oldImage provided, purge old cloud image first
     if (oldImage) {
       try {
-        await deleteImageFromStorage(oldImage);
+        await deleteImageFromStorage(oldImage, userId);
       } catch (purgeErr) {
         console.error('Failed to purge old image on replace:', purgeErr.message);
       }
@@ -247,7 +247,7 @@ const uploadImageFromUrl = async (req, res) => {
     // Purge old image if replacing
     if (oldImage) {
       try {
-        await deleteImageFromStorage(oldImage);
+        await deleteImageFromStorage(oldImage, userId);
       } catch (purgeErr) {
         console.error('Failed to purge old image on URL replace:', purgeErr.message);
       }
@@ -308,7 +308,7 @@ const deleteImage = async (req, res) => {
       return res.status(400).json({ message: 'No image target provided.' });
     }
 
-    await deleteImageFromStorage(image);
+    await deleteImageFromStorage(image, req.user.isAdmin ? null : userId);
 
     try {
       await ImageAuditLog.create({

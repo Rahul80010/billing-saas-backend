@@ -15,6 +15,36 @@ const safeEmit = (channel, event, data) => {
   }
 };
 
+// Helper to sanitize booking dates (prevents 2-digit years like 0026 -> 2026 or invalid dates)
+const sanitizeBookingDate = (dateInput, fallback = new Date()) => {
+  if (!dateInput) return fallback;
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return fallback;
+  // If year was typed as 2 digits e.g. 26 -> 0026, fix to 2026
+  if (d.getFullYear() < 100) {
+    d.setFullYear(d.getFullYear() + 2000);
+  } else if (d.getFullYear() < 2020) {
+    // If unreasonable past year before the platform existed, normalize to current year
+    d.setFullYear(new Date().getFullYear());
+  }
+  return d;
+};
+
+// Helper to safely calculate stay duration with sanity bounds
+const calculateStayNights = (checkInDateVal, totalNightsDefault = 1) => {
+  const checkIn = sanitizeBookingDate(checkInDateVal);
+  const now = new Date();
+  const diffMs = now.getTime() - checkIn.getTime();
+  if (diffMs <= 0) return 1;
+  const rawNights = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  // If calculation exceeds a reasonable human stay limit (e.g. 365 nights / 1 year), fallback
+  if (rawNights > 365) {
+    return Math.max(1, Number(totalNightsDefault) || 1);
+  }
+  return Math.max(1, rawNights);
+};
+
+
 // Check In Guest
 exports.checkInGuest = async (req, res) => {
   try {
@@ -64,7 +94,8 @@ exports.checkInGuest = async (req, res) => {
     const count = await HotelBooking.countDocuments({ tenantId });
     const bookingNumber = `HTL-${todayStr}-${(count + 1).toString().padStart(4, '0')}`;
 
-    const checkIn = checkInDate ? new Date(checkInDate) : new Date();
+    const checkIn = sanitizeBookingDate(checkInDate);
+    const expCheckOut = expectedCheckOutDate ? sanitizeBookingDate(expectedCheckOutDate, null) : null;
     const rate = Number(roomRatePerNight) || 0;
     const advance = Number(advancePayment) || 0;
 
@@ -82,6 +113,13 @@ exports.checkInGuest = async (req, res) => {
             idProofNumber: (g.idProofNumber || '').trim(),
           }))
       : [];
+
+    let initialNights = 1;
+    if (expCheckOut && expCheckOut > checkIn) {
+      const diffDays = Math.ceil((expCheckOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+      initialNights = Math.max(1, Math.min(365, diffDays));
+    }
+    const initialRoomCharges = initialNights * rate;
 
     const booking = new HotelBooking({
       tenantId,
@@ -103,16 +141,16 @@ exports.checkInGuest = async (req, res) => {
       numberOfChildren: Number(numberOfChildren) || 0,
       additionalGuests: cleanAdditionalGuests,
       checkInDate: checkIn,
-      expectedCheckOutDate: expectedCheckOutDate ? new Date(expectedCheckOutDate) : null,
+      expectedCheckOutDate: expCheckOut,
       roomRatePerNight: rate,
-      totalNights: 1,
-      roomChargesTotal: rate,
-      subTotal: rate,
-      grandTotal: rate,
+      totalNights: initialNights,
+      roomChargesTotal: initialRoomCharges,
+      subTotal: initialRoomCharges,
+      grandTotal: initialRoomCharges,
       advancePayment: advance,
       advancePaymentMethod: advancePaymentMethod || 'Cash',
-      balanceDue: Math.max(0, rate - advance),
-      paymentStatus: advance >= rate ? 'Paid' : (advance > 0 ? 'Partial' : 'Pending'),
+      balanceDue: Math.max(0, initialRoomCharges - advance),
+      paymentStatus: advance >= initialRoomCharges ? 'Paid' : (advance > 0 ? 'Partial' : 'Pending'),
       status: 'Checked-In',
       specialRequests: (specialRequests || '').trim(),
       checkedInBy: req.user.name || 'Front Desk',
@@ -232,14 +270,10 @@ exports.getActiveBookings = async (req, res) => {
       .sort({ checkInDate: -1 });
 
     // Reconcile and calculate live stay durations & live running balances
-    const now = new Date();
     const liveBookings = await Promise.all(bookings.map(async b => {
       await reconcileBookingFoodOrders(b);
       const bObj = b.toObject();
-      const checkIn = new Date(bObj.checkInDate);
-      const diffMs = now.getTime() - checkIn.getTime();
-      const rawNights = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      const currentNights = Math.max(1, rawNights);
+      const currentNights = calculateStayNights(bObj.checkInDate, bObj.totalNights);
 
       const roomCharges = currentNights * bObj.roomRatePerNight;
       const foodTotal = (bObj.foodOrders || []).reduce((acc, f) => acc + (f.amount || 0), 0);
@@ -275,11 +309,7 @@ exports.getBookingDetails = async (req, res) => {
     await reconcileBookingFoodOrders(booking);
 
     const bObj = booking.toObject();
-    const now = new Date();
-    const checkIn = new Date(bObj.checkInDate);
-    const diffMs = now.getTime() - checkIn.getTime();
-    const rawNights = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    const currentNights = Math.max(1, rawNights);
+    const currentNights = calculateStayNights(bObj.checkInDate, bObj.totalNights);
 
     const roomCharges = currentNights * bObj.roomRatePerNight;
     const foodTotal = (bObj.foodOrders || []).reduce((acc, f) => acc + (f.amount || 0), 0);
@@ -363,10 +393,7 @@ exports.addPayment = async (req, res) => {
     });
 
     // Recalculate totals
-    const now = new Date();
-    const checkIn = new Date(booking.checkInDate);
-    const diffMs = now.getTime() - checkIn.getTime();
-    const currentNights = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+    const currentNights = calculateStayNights(booking.checkInDate, booking.totalNights);
     const roomCharges = currentNights * booking.roomRatePerNight;
     const foodTotal = (booking.foodOrders || []).reduce((acc, f) => acc + (f.amount || 0), 0);
     const extraTotal = (booking.extraServices || []).reduce((acc, s) => acc + (s.amount || 0), 0);
@@ -434,7 +461,9 @@ exports.checkOutGuest = async (req, res) => {
     await reconcileBookingFoodOrders(booking);
 
     const actualOut = new Date();
-    const nights = Number(totalNights) || 1;
+    let nights = Number(totalNights) || 1;
+    if (nights < 1) nights = 1;
+    if (nights > 365) nights = booking.totalNights || 1;
     const rate = Number(roomRatePerNight) !== undefined ? Number(roomRatePerNight) : booking.roomRatePerNight;
     const roomChargesTotal = nights * rate;
 

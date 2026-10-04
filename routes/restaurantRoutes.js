@@ -27,15 +27,31 @@ router.get('/waiter-requests', protect, restaurantController.getPendingWaiterReq
 router.put('/waiter-requests/resolve-all', protect, restaurantController.resolveAllWaiterRequests);
 router.put('/waiter-requests/:id/resolve', protect, restaurantController.resolveWaiterRequest);
 
-// ==========================================
-// PUBLIC CUSTOMER ROUTES (No Auth Required)
-// ==========================================
+const rateLimit = require('express-rate-limit');
+
+// Rate limiter for public customer lookup (prevent phone enumeration)
+const lookupLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many lookup requests, please try again shortly.' }
+});
+
+// Rate limiter for public orders
+const publicOrderLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many order attempts, please try again shortly.' }
+});
 
 // Used by Customer scanning QR
 router.get('/public/menu/:tenantId/:tableId', restaurantController.getPublicMenu);
-router.post('/public/order', restaurantController.placeOrder);
+router.post('/public/order', publicOrderLimiter, restaurantController.placeOrder);
 router.get('/public/order/:orderId', restaurantController.getOrderStatus);
-router.post('/public/waiter-request', restaurantController.createWaiterRequest);
-router.get('/public/customer-lookup/:tenantId/:phone', restaurantController.lookupCustomerByPhone);
+router.post('/public/waiter-request', publicOrderLimiter, restaurantController.createWaiterRequest);
+router.get('/public/customer-lookup/:tenantId/:phone', lookupLimiter, restaurantController.lookupCustomerByPhone);
 
 module.exports = router;

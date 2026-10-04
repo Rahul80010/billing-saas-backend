@@ -5,9 +5,9 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 
 // Initialize S3Client for Cloudflare R2 / AWS S3
 const getS3Client = () => {
-  const accountId = process.env.R2_ACCOUNT_ID || 'b66335680e85ba1b77b8a1bd05ddc272';
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID || '31e686a296e9631212a35bc92ed16446';
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || 'cfc5e2635440772d7ec3cbbc5ff7d19778bb46250d132fbde2d23f71060ea267';
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const endpoint = process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : process.env.AWS_S3_ENDPOINT);
 
   if (!accessKeyId || !secretAccessKey) {
@@ -29,16 +29,16 @@ const getBucketName = () => {
 };
 
 const getPublicCdnDomain = () => {
-  const publicDomain = process.env.R2_PUBLIC_DOMAIN || process.env.AWS_S3_PUBLIC_DOMAIN || 'https://pub-8dfe6da5cfb64742aec95d39d3bc73ae.r2.dev';
+  const publicDomain = process.env.R2_PUBLIC_DOMAIN || process.env.AWS_S3_PUBLIC_DOMAIN;
   if (publicDomain) {
     return publicDomain.endsWith('/') ? publicDomain.slice(0, -1) : publicDomain;
   }
-  const accountId = process.env.R2_ACCOUNT_ID || 'b66335680e85ba1b77b8a1bd05ddc272';
+  const accountId = process.env.R2_ACCOUNT_ID;
   const bucketName = getBucketName();
   if (accountId && bucketName) {
     return `https://${bucketName}.${accountId}.r2.dev`;
   }
-  return 'https://pub-8dfe6da5cfb64742aec95d39d3bc73ae.r2.dev';
+  return null;
 };
 
 /**
@@ -134,8 +134,9 @@ const uploadBufferToStorage = async (buffer, keyPath, mimeType = 'image/webp') =
 /**
  * Delete image and its thumbnail from Cloudflare R2 / S3 or Local storage
  * @param {string|object} imageField - String URL or Metadata object
+ * @param {string} [expectedTenantId] - Optional tenant ID to enforce tenant namespace isolation
  */
-const deleteImageFromStorage = async (imageField) => {
+const deleteImageFromStorage = async (imageField, expectedTenantId = null) => {
   if (!imageField) return;
 
   const extractUrl = (item) => {
@@ -162,11 +163,33 @@ const deleteImageFromStorage = async (imageField) => {
     const parseKey = (targetUrl) => {
       if (!targetUrl || typeof targetUrl !== 'string' || targetUrl.startsWith('data:')) return null;
       try {
+        let key = targetUrl;
         if (targetUrl.includes('/uploads/')) {
-          return targetUrl.split('/uploads/')[1];
+          key = targetUrl.split('/uploads/')[1];
+        } else if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+          const parsed = new URL(targetUrl);
+          key = parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname;
         }
-        const parsed = new URL(targetUrl);
-        return parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname;
+
+        // Clean key
+        key = key.replace(/^\/+/, '').trim();
+        // Prevent path traversal
+        if (key.includes('..') || path.isAbsolute(key)) {
+          console.warn(`⚠️ Path traversal attempt blocked in deleteImageFromStorage: ${key}`);
+          return null;
+        }
+
+        // Tenant namespace enforcement
+        if (expectedTenantId) {
+          const cleanTenant = expectedTenantId.toString().replace(/[^a-zA-Z0-9_-]/g, '');
+          const expectedPrefix = `tenant_${cleanTenant}/`;
+          if (!key.startsWith(expectedPrefix)) {
+            console.warn(`⚠️ Cross-tenant deletion attempt blocked: Tenant ${cleanTenant} attempted to delete key ${key}`);
+            return null;
+          }
+        }
+
+        return key;
       } catch (_) {
         return null;
       }
@@ -175,12 +198,13 @@ const deleteImageFromStorage = async (imageField) => {
     const k1 = parseKey(url);
     const k2 = parseKey(thumbUrl);
 
-    if (k1) keysToDelete.push(k1);
-    if (k2 && k2 !== k1) keysToDelete.push(k2);
+    if (k1 && !keysToDelete.includes(k1)) keysToDelete.push(k1);
+    if (k2 && !keysToDelete.includes(k2)) keysToDelete.push(k2);
   }
 
   const s3Client = getS3Client();
   const bucketName = getBucketName();
+  const safeUploadsDir = path.resolve(__dirname, '..', 'uploads');
 
   for (const key of keysToDelete) {
     if (s3Client && bucketName) {
@@ -191,8 +215,8 @@ const deleteImageFromStorage = async (imageField) => {
       }
     } else {
       try {
-        const localPath = path.join(__dirname, '..', 'uploads', key);
-        if (fs.existsSync(localPath)) {
+        const localPath = path.resolve(safeUploadsDir, key);
+        if (localPath.startsWith(safeUploadsDir) && fs.existsSync(localPath)) {
           fs.unlinkSync(localPath);
         }
       } catch (err) {

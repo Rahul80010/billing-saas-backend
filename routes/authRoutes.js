@@ -12,65 +12,65 @@ const {
   testWhatsapp,
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
+const rateLimit = require('express-rate-limit');
 
-router.post('/register', registerUser);
-router.post('/login', loginUser);
-router.post('/verify-otp', verifyOtp);
-router.post('/resend-otp', resendOtp);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPassword);
+// Rate limiter for authentication attempts (15 mins window, 25 requests)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many login or registration attempts. Please try again in 15 minutes.' }
+});
+
+// Strict rate limiter for OTP verification & resending (15 mins window, 15 requests)
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many OTP requests. Please try again after 15 minutes.' }
+});
+
+router.post('/register', authLimiter, registerUser);
+router.post('/login', authLimiter, loginUser);
+router.post('/verify-otp', otpLimiter, verifyOtp);
+router.post('/resend-otp', otpLimiter, resendOtp);
+router.post('/forgot-password', authLimiter, forgotPassword);
+router.post('/reset-password', otpLimiter, resetPassword);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.post('/test-whatsapp', protect, testWhatsapp);
 
-// Safe debugging route to check live environment variable mapping
-router.get('/debug-smtp', (req, res) => {
-  res.json({
-    smtp_host: process.env.SMTP_HOST || 'not defined',
-    smtp_port: process.env.SMTP_PORT || 'not defined',
-    smtp_user: process.env.SMTP_USER || 'not defined',
-    smtp_pass_exists: !!process.env.SMTP_PASS,
-    smtp_from: process.env.SMTP_FROM || 'not defined',
-    resend_api_key_exists: !!process.env.RESEND_API_KEY,
-    resend_from: process.env.RESEND_FROM || 'not defined',
-    node_env: process.env.NODE_ENV || 'not defined',
-    jwt_secret_exists: !!process.env.JWT_SECRET
-  });
-});
-
-// Diagnostic route to synchronously test email sending and catch SMTP errors
-router.post('/test-email', async (req, res) => {
-  const { email, host: overrideHost, port: overridePort, user: overrideUser, pass: overridePass } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: 'Please provide a target email address' });
+// Diagnostic route to synchronously test email sending (Restricted to Admin Only, SSRF-safe)
+router.post('/test-email', protect, (req, res, next) => {
+  if (!req.user || !req.user.isAdmin) {
+    return res.status(403).json({ message: 'Not authorized as an admin' });
+  }
+  next();
+}, async (req, res) => {
+  const { email } = req.body;
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Please provide a valid target email address' });
   }
 
   const nodemailer = require('nodemailer');
-  const host = overrideHost || process.env.SMTP_HOST;
-  const port = overridePort || process.env.SMTP_PORT || 587;
-  const user = overrideUser || process.env.SMTP_USER;
-  const pass = overridePass || process.env.SMTP_PASS;
+  const host = process.env.SMTP_HOST;
+  const port = process.env.SMTP_PORT || 587;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
   const from = process.env.SMTP_FROM || `"MOHURI by Detalogy" <noreply@mohuri.com>`;
 
-  if (!user || !pass) {
+  if (!user || !pass || !host) {
     return res.status(400).json({
-      error: 'SMTP credentials are not configured (SMTP_USER or SMTP_PASS is missing)'
+      error: 'SMTP credentials are not configured in server environment'
     });
   }
 
   try {
-    const dns = require('dns').promises;
-    let resolvedHost = host;
-    try {
-      const lookupResult = await dns.lookup(host, { family: 4 });
-      resolvedHost = lookupResult.address;
-    } catch (dnsErr) {
-      console.warn('DNS lookup failed in test-email:', dnsErr.message);
-    }
-
     const isSecure = Number(port) === 465;
     const transporter = nodemailer.createTransport({
-      host: resolvedHost,
+      host,
       port: Number(port),
       secure: isSecure,
       auth: {
@@ -80,22 +80,20 @@ router.post('/test-email', async (req, res) => {
       tls: {
         servername: host,
       },
-      // Increase timeout to 10 seconds to fail faster if blocked
       connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 10000,
     });
 
     const info = await transporter.sendMail({
-      from: overrideUser ? `"MOHURI Test" <${overrideUser}>` : from,
+      from,
       to: email,
-      subject: `MOHURI SMTP Diagnostic Test (Port ${port})`,
-      text: `If you are reading this email, your SMTP setup is 100% correct and active! (Port: ${port}, Secure: ${isSecure})`,
+      subject: `MOHURI SMTP Diagnostic Test`,
+      text: `MOHURI SMTP diagnostic verification email. Port: ${port}, Secure: ${isSecure}`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
           <h2 style="color: #10b981;">SMTP Configuration Verified!</h2>
-          <p>Congratulations! Your Gmail SMTP integration is fully functional.</p>
-          <p>Sent via: <strong>${user}</strong> on host <strong>${host}:${port}</strong> (Secure: ${isSecure})</p>
+          <p>Congratulations! Your SMTP integration is fully functional.</p>
         </div>
       `
     });
@@ -103,15 +101,11 @@ router.post('/test-email', async (req, res) => {
     res.json({
       success: true,
       messageId: info.messageId,
-      response: info.response,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: error.message,
-      code: error.code,
-      command: error.command,
-      stack: error.stack,
+      error: 'Failed to send diagnostic test email. Check server SMTP settings.',
     });
   }
 });

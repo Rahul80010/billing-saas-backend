@@ -261,7 +261,7 @@ const updateProduct = async (req, res) => {
       const oldImgStr = getImageUrlString(product.image);
 
       if (image !== undefined && oldImgStr && newImgStr !== oldImgStr) {
-        await deleteImageFromStorage(product.image);
+        await deleteImageFromStorage(product.image, req.user._id);
       }
 
       if (typeof image === 'string' && image.startsWith('http')) {
@@ -289,9 +289,21 @@ const updateProduct = async (req, res) => {
       if (Array.isArray(variants)) {
         for (const v of variants) {
           if (v._id) {
+            const updateFields = {};
+            if (v.variantName !== undefined) updateFields.variantName = String(v.variantName).trim();
+            if (v.barcode !== undefined) updateFields.barcode = String(v.barcode).trim();
+            if (v.sku !== undefined) updateFields.sku = String(v.sku).trim();
+            if (v.price !== undefined) updateFields.price = Number(v.price);
+            if (v.buyingCost !== undefined) updateFields.buyingCost = Number(v.buyingCost);
+            if (v.stock !== undefined) updateFields.stock = Number(v.stock);
+            if (v.lowStockAlert !== undefined) updateFields.lowStockAlert = Number(v.lowStockAlert);
+            if (v.status !== undefined && ['active', 'inactive'].includes(v.status)) updateFields.status = v.status;
+            if (v.hsnCode !== undefined) updateFields.hsnCode = String(v.hsnCode).trim();
+            if (v.image !== undefined) updateFields.image = v.image;
+
             await ProductVariant.updateOne(
-              { _id: v._id, userId: req.user._id },
-              { $set: v }
+              { _id: v._id, userId: req.user._id, productId: product._id },
+              { $set: updateFields }
             );
           } else if (v.variantName && v.price !== undefined) {
             const newVar = new ProductVariant({
@@ -347,14 +359,14 @@ const deleteProduct = async (req, res) => {
       const variants = await ProductVariant.find({ productId: product._id });
       for (const v of variants) {
         if (v.image) {
-          await deleteImageFromStorage(v.image);
+          await deleteImageFromStorage(v.image, req.user._id);
         }
       }
       if (product.image) {
-        await deleteImageFromStorage(product.image);
+        await deleteImageFromStorage(product.image, req.user._id);
       }
       if (Array.isArray(product.images)) {
-        await deleteImageFromStorage(product.images);
+        await deleteImageFromStorage(product.images, req.user._id);
       }
 
       // Delete database records

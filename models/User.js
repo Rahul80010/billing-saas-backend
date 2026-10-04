@@ -29,11 +29,19 @@ const userSchema = new mongoose.Schema({
   otpExpires: {
     type: Date,
   },
+  otpAttempts: {
+    type: Number,
+    default: 0,
+  },
   resetPasswordOtp: {
     type: String,
   },
   resetPasswordOtpExpires: {
     type: Date,
+  },
+  resetOtpAttempts: {
+    type: Number,
+    default: 0,
   },
   businessName: {
     type: String,
