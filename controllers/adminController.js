@@ -4,6 +4,7 @@ const Product = require('../models/Product');
 const Customer = require('../models/Customer');
 const Campaign = require('../models/Campaign');
 const Notification = require('../models/Notification');
+const LoginLog = require('../models/LoginLog');
 
 // @desc    Get Admin Dashboard aggregate statistics
 // @route   GET /api/admin/stats
@@ -14,6 +15,17 @@ const getDashboardStats = async (req, res) => {
     const verifiedMerchants = await User.countDocuments({ isAdmin: { $ne: true }, isVerified: true });
     const unverifiedMerchants = await User.countDocuments({ isAdmin: { $ne: true }, isVerified: false });
     const blockedMerchants = await User.countDocuments({ isAdmin: { $ne: true }, isBlocked: true });
+
+    // Recent login activity & today's count
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const activeLoginsToday = await LoginLog.countDocuments({
+      createdAt: { $gte: startOfToday }
+    });
+    const recentLogins = await LoginLog.find()
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .lean();
     
     const totalBills = await Bill.countDocuments();
     const totalProducts = await Product.countDocuments();
@@ -78,6 +90,10 @@ const getDashboardStats = async (req, res) => {
       growth: {
         merchants: merchantGrowth,
         invoices: invoiceGrowth
+      },
+      logins: {
+        today: activeLoginsToday,
+        recent: recentLogins
       }
     });
   } catch (error) {
@@ -287,10 +303,69 @@ const broadcastMessage = async (req, res) => {
   }
 };
 
+// @desc    Get paginated, searchable login activity audit logs
+// @route   GET /api/admin/login-activity
+// @access  Private/Admin
+const getLoginActivity = async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 15;
+  const skip = (page - 1) * limit;
+  const search = (req.query.search || '').trim();
+  const role = req.query.role || 'All';
+  const device = req.query.device || 'All';
+
+  const filter = {};
+
+  if (role !== 'All') {
+    filter.role = role;
+  }
+
+  if (device !== 'All') {
+    filter.device = device;
+  }
+
+  if (search) {
+    const escaped = escapeRegex(search);
+    const regex = new RegExp(escaped, 'i');
+    filter.$or = [
+      { userName: regex },
+      { userEmail: regex },
+      { businessName: regex },
+      { ipAddress: regex },
+      { browser: regex },
+      { os: regex }
+    ];
+  }
+
+  try {
+    const total = await LoginLog.countDocuments(filter);
+    const logs = await LoginLog.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayCount = await LoginLog.countDocuments({ createdAt: { $gte: startOfToday } });
+
+    res.json({
+      logs,
+      page,
+      pages: Math.ceil(total / limit) || 1,
+      total,
+      todayCount
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getMerchants,
   getMerchantById,
   updateMerchantStatus,
-  broadcastMessage
+  broadcastMessage,
+  getLoginActivity
 };

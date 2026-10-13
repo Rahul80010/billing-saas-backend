@@ -1,6 +1,64 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const LoginLog = require('../models/LoginLog');
 const { sendOtpEmail } = require('../config/emailService');
+
+// Helper to record login activity and update user lastLogin
+const recordUserLogin = async (user, req, loginMethod = 'PASSWORD') => {
+  try {
+    const now = new Date();
+    await User.updateOne(
+      { _id: user._id },
+      { 
+        $set: { lastLogin: now },
+        $inc: { loginCount: 1 }
+      }
+    );
+
+    const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    const ipAddress = rawIp.split(',')[0].trim() || 'Unknown';
+    const userAgent = req.headers['user-agent'] || '';
+
+    let device = 'Desktop';
+    if (/mobile/i.test(userAgent) || /android/i.test(userAgent) || /iphone/i.test(userAgent)) {
+      device = 'Mobile';
+    } else if (/tablet|ipad/i.test(userAgent)) {
+      device = 'Tablet';
+    }
+
+    let browser = 'Browser';
+    if (/edg/i.test(userAgent)) browser = 'Edge';
+    else if (/chrome/i.test(userAgent)) browser = 'Chrome';
+    else if (/firefox/i.test(userAgent)) browser = 'Firefox';
+    else if (/safari/i.test(userAgent)) browser = 'Safari';
+    else if (/opera|opr/i.test(userAgent)) browser = 'Opera';
+
+    let os = 'Unknown';
+    if (/windows/i.test(userAgent)) os = 'Windows';
+    else if (/android/i.test(userAgent)) os = 'Android';
+    else if (/iphone|ipad|ios/i.test(userAgent)) os = 'iOS';
+    else if (/macintosh|mac os/i.test(userAgent)) os = 'macOS';
+    else if (/linux/i.test(userAgent)) os = 'Linux';
+
+    await LoginLog.create({
+      userId: user._id,
+      userName: user.name,
+      userEmail: user.email,
+      businessName: user.businessName || '',
+      businessPhone: user.businessPhone || '',
+      role: user.isAdmin ? 'Admin' : 'Merchant',
+      ipAddress,
+      userAgent,
+      device,
+      browser,
+      os,
+      loginMethod,
+      status: 'SUCCESS'
+    });
+  } catch (err) {
+    console.warn('Failed to record login activity:', err.message);
+  }
+};
 
 // Generate JWT token
 const generateToken = (id) => {
@@ -111,6 +169,9 @@ const loginUser = async (req, res) => {
         });
       }
 
+      // Record login activity in background
+      await recordUserLogin(user, req, 'PASSWORD');
+
       res.json({
         _id: user._id,
         name: user.name,
@@ -174,6 +235,9 @@ const verifyOtp = async (req, res) => {
     user.otpExpires = undefined;
     user.otpAttempts = 0;
     await user.save();
+
+    // Record login activity in background
+    await recordUserLogin(user, req, 'OTP');
 
     res.status(200).json({
       _id: user._id,

@@ -6,7 +6,8 @@ const {
   getMerchants,
   getMerchantById,
   updateMerchantStatus,
-  broadcastMessage
+  broadcastMessage,
+  getLoginActivity
 } = require('../controllers/adminController');
 
 // Apply protection and admin verification middleware to all routes in this router
@@ -15,6 +16,7 @@ router.use(admin);
 
 // Admin Action Routes
 router.get('/stats', getDashboardStats);
+router.get('/login-activity', getLoginActivity);
 router.get('/merchants', getMerchants);
 router.get('/merchants/:id', getMerchantById);
 router.put('/merchants/:id/status', updateMerchantStatus);
