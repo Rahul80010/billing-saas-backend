@@ -83,6 +83,10 @@ const productSchema = new mongoose.Schema({
     type: [mongoose.Schema.Types.Mixed],
     default: [],
   },
+  hasVariants: {
+    type: Boolean,
+    default: false,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', productSchema);

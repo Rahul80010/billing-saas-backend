@@ -20,6 +20,16 @@ const purchaseItemSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  pricingOption: {
+    type: String,
+    enum: ['keep_price', 'update_price', 'create_variant', ''],
+    default: 'keep_price',
+  },
+  newSellingPrice: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
 });
 
 const purchaseSchema = new mongoose.Schema({

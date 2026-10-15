@@ -1,5 +1,6 @@
 const Bill = require('../models/Bill');
 const Product = require('../models/Product');
+const ProductVariant = require('../models/ProductVariant');
 const Customer = require('../models/Customer');
 const Supplier = require('../models/Supplier');
 const Purchase = require('../models/Purchase');
@@ -12,7 +13,10 @@ const getDateBounds = (timeframe, customStart, customEnd) => {
   let start = new Date(2000, 0, 1); // default fallback: all time
   let end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-  if (timeframe === 'today') {
+  if (timeframe === 'all' || timeframe === 'all-time') {
+    start = new Date(2000, 0, 1);
+    end = new Date(now.getFullYear() + 10, 11, 31, 23, 59, 59, 999);
+  } else if (timeframe === 'today') {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
   } else if (timeframe === 'yesterday') {
     const yesterday = new Date();
@@ -522,13 +526,99 @@ const logPurchase = async (req, res) => {
     // Update inventory stock if requested & product exists in database (skip non-existing items)
     if (updateInventory && items && items.length > 0) {
       for (const item of items) {
+        if (!item.productName) continue;
         const product = await Product.findOne({
           userId: req.user._id,
           name: { $regex: new RegExp(`^${item.productName.trim()}$`, 'i') }
         });
         if (product) {
-          product.stock = (product.stock || 0) + Number(item.quantity || 0);
-          await product.save();
+          const oldStock = Number(product.stock || 0);
+          const oldCost = Number(product.buyingCost || 0);
+          const newQty = Number(item.quantity || 0);
+          const newCost = Number(item.price || 0); // Unit buying cost
+
+          const totalStock = oldStock + newQty;
+
+          if (item.pricingOption === 'update_price' && item.newSellingPrice) {
+            // Option 2: Update selling price for all stock
+            const newSellRate = Number(item.newSellingPrice);
+            product.price = newSellRate;
+            if (totalStock > 0) {
+              product.buyingCost = Math.round((((oldStock * oldCost) + (newQty * newCost)) / totalStock) * 100) / 100;
+            } else {
+              product.buyingCost = newCost;
+            }
+            product.stock = totalStock;
+            await product.save();
+
+            // Also update price on all existing variants if any
+            await ProductVariant.updateMany(
+              { productId: product._id, userId: req.user._id },
+              { $set: { price: newSellRate } }
+            );
+          } else if (item.pricingOption === 'create_variant' && item.newSellingPrice) {
+            // Option 3: Keep old & new stock as separate variants
+            const variantPrice = Number(item.newSellingPrice);
+            const existingVariants = await ProductVariant.find({ productId: product._id, userId: req.user._id });
+
+            // 1. If no variants exist yet, convert old stock into Variant 1
+            if (existingVariants.length === 0 && oldStock > 0) {
+              await ProductVariant.create({
+                productId: product._id,
+                userId: req.user._id,
+                variantName: `Old Stock (₹${product.price})`,
+                price: Number(product.price),
+                buyingCost: oldCost,
+                stock: oldStock
+              });
+            }
+
+            // 2. Check if a variant with this selling price or name already exists
+            const matchedVariant = existingVariants.find(v => 
+              Number(v.price) === variantPrice || v.variantName === `New Stock (₹${variantPrice})`
+            );
+
+            if (matchedVariant) {
+              // Increment its stock by newQty and recalculate weighted average buying cost for this variant
+              const vOldStock = Number(matchedVariant.stock || 0);
+              const vOldCost = Number(matchedVariant.buyingCost || 0);
+              const vTotalStock = vOldStock + newQty;
+              matchedVariant.stock = vTotalStock;
+              matchedVariant.buyingCost = vTotalStock > 0
+                ? Math.round((((vOldStock * vOldCost) + (newQty * newCost)) / vTotalStock) * 100) / 100
+                : newCost;
+              await matchedVariant.save();
+            } else {
+              // Create new variant with a unique name within this product
+              let vName = `New Stock (₹${variantPrice})`;
+              let counter = 1;
+              while (existingVariants.some(v => v.variantName === vName)) {
+                counter++;
+                vName = `New Stock (₹${variantPrice}) #${counter}`;
+              }
+              await ProductVariant.create({
+                productId: product._id,
+                userId: req.user._id,
+                variantName: vName,
+                price: variantPrice,
+                buyingCost: newCost,
+                stock: newQty
+              });
+            }
+
+            product.hasVariants = true;
+            product.stock = totalStock;
+            await product.save();
+          } else {
+            // Option 1: Keep current selling price (weighted average buying cost)
+            if (totalStock > 0) {
+              product.buyingCost = Math.round((((oldStock * oldCost) + (newQty * newCost)) / totalStock) * 100) / 100;
+            } else {
+              product.buyingCost = newCost;
+            }
+            product.stock = totalStock;
+            await product.save();
+          }
         }
       }
     }
