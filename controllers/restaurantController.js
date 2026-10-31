@@ -15,13 +15,13 @@ exports.createTable = async (req, res) => {
     const { tableName, tableNumber, capacity, section, isRoom, roomType, floor, currentGuestName, currentGuestPhone } = req.body;
     
     // Check if tableNumber already exists for this tenant
-    const existing = await RestaurantTable.findOne({ tenantId: req.user.id, tableNumber });
+    const existing = await RestaurantTable.findOne({ tenantId: req.user._id, tableNumber });
     if (existing) {
       return res.status(400).json({ message: isRoom ? 'Room number already exists' : 'Table number already exists' });
     }
 
     const table = new RestaurantTable({
-      tenantId: req.user.id,
+      tenantId: req.user._id,
       tableName: tableName || (isRoom ? `Room ${tableNumber}` : `Table ${tableNumber}`),
       tableNumber,
       capacity: Number(capacity) || (isRoom ? 2 : 4),
@@ -34,7 +34,7 @@ exports.createTable = async (req, res) => {
     });
     
     // Generate QR Data link
-    table.qrCodeData = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/menu/${req.user.id}/${table._id}`;
+    table.qrCodeData = `${process.env.FRONTEND_URL || 'https://mohuri.detalogy.com'}/menu/${req.user._id}/${table._id}`;
     
     await table.save();
     res.status(201).json(table);
@@ -63,10 +63,10 @@ exports.bulkCreateRooms = async (req, res) => {
 
     const createdRooms = [];
     for (let num = start; num <= end; num++) {
-      const existing = await RestaurantTable.findOne({ tenantId: req.user.id, tableNumber: num });
+      const existing = await RestaurantTable.findOne({ tenantId: req.user._id, tableNumber: num });
       if (!existing) {
         const room = new RestaurantTable({
-          tenantId: req.user.id,
+          tenantId: req.user._id,
           tableName: `${roomPrefix} ${num}`,
           tableNumber: num,
           isRoom: true,
@@ -75,7 +75,7 @@ exports.bulkCreateRooms = async (req, res) => {
           section: roomFloor,
           capacity: 2,
         });
-        room.qrCodeData = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/menu/${req.user.id}/${room._id}`;
+        room.qrCodeData = `${process.env.FRONTEND_URL || 'https://mohuri.detalogy.com'}/menu/${req.user._id}/${room._id}`;
         await room.save();
         createdRooms.push(room);
       }
@@ -90,7 +90,7 @@ exports.bulkCreateRooms = async (req, res) => {
 
 exports.getTables = async (req, res) => {
   try {
-    const tables = await RestaurantTable.find({ tenantId: req.user.id }).sort({ tableNumber: 1 });
+    const tables = await RestaurantTable.find({ tenantId: req.user._id }).sort({ tableNumber: 1 });
     res.json(tables);
   } catch (error) {
     console.error(error);
@@ -101,7 +101,7 @@ exports.getTables = async (req, res) => {
 exports.updateTable = async (req, res) => {
   try {
     const { tableName, tableNumber, status, capacity, section, isRoom, roomType, floor, currentGuestName, currentGuestPhone } = req.body;
-    const table = await RestaurantTable.findOne({ _id: req.params.id, tenantId: req.user.id });
+    const table = await RestaurantTable.findOne({ _id: req.params.id, tenantId: req.user._id });
     
     if (!table) return res.status(404).json({ message: 'Record not found' });
     
@@ -120,7 +120,7 @@ exports.updateTable = async (req, res) => {
     
     // Emit event if status changes
     const io = getIO();
-    io.to(`tenant_${req.user.id}`).emit('table_updated', table);
+    io.to(`tenant_${req.user._id}`).emit('table_updated', table);
     
     res.json(table);
   } catch (error) {
@@ -131,7 +131,7 @@ exports.updateTable = async (req, res) => {
 
 exports.deleteTable = async (req, res) => {
   try {
-    const table = await RestaurantTable.findOneAndDelete({ _id: req.params.id, tenantId: req.user.id });
+    const table = await RestaurantTable.findOneAndDelete({ _id: req.params.id, tenantId: req.user._id });
     if (!table) return res.status(404).json({ message: 'Record not found' });
     res.json({ message: table.isRoom ? 'Room removed' : 'Table removed' });
   } catch (error) {
@@ -283,7 +283,7 @@ exports.getPublicMenu = async (req, res) => {
 
 exports.placeOrder = async (req, res) => {
   try {
-    const tenantId = req.user ? req.user.id : req.body.tenantId;
+    const tenantId = req.user ? req.user._id : req.body.tenantId;
     const { tableId, items, customerName, customerPhone, notes, orderType, paymentOption } = req.body;
 
     if (!tenantId) {
@@ -499,7 +499,7 @@ exports.getOrderStatus = async (req, res) => {
 exports.getActiveOrders = async (req, res) => {
   try {
     const orders = await RestaurantOrder.find({ 
-      tenantId: req.user.id, 
+      tenantId: req.user._id, 
       status: { $in: ['Received', 'Preparing', 'Ready', 'Served'] }
     }).populate('items.product items.variant tableId').sort({ createdAt: 1 });
     
@@ -513,7 +513,7 @@ exports.getActiveOrders = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const order = await RestaurantOrder.findOne({ _id: req.params.id, tenantId: req.user.id }).populate('items.product items.variant tableId');
+    const order = await RestaurantOrder.findOne({ _id: req.params.id, tenantId: req.user._id }).populate('items.product items.variant tableId');
     
     if (!order) return res.status(404).json({ message: 'Order not found' });
     
@@ -531,13 +531,13 @@ exports.updateOrderStatus = async (req, res) => {
     
     // If Ready, notify Billing & Tenant (Waiter)
     if (status === 'Ready' || status === 'Served') {
-      io.to(`billing_${req.user.id}`).emit('order_ready', order);
-      io.to(`tenant_${req.user.id}`).emit('order_ready', order);
+      io.to(`billing_${req.user._id}`).emit('order_ready', order);
+      io.to(`tenant_${req.user._id}`).emit('order_ready', order);
     }
     
     // Notify Kitchen & Tenant (Waiter)
-    io.to(`kitchen_${req.user.id}`).emit('order_status_updated', order);
-    io.to(`tenant_${req.user.id}`).emit('order_status_updated', order);
+    io.to(`kitchen_${req.user._id}`).emit('order_status_updated', order);
+    io.to(`tenant_${req.user._id}`).emit('order_status_updated', order);
 
     res.json(order);
   } catch (error) {
@@ -582,7 +582,7 @@ exports.createWaiterRequest = async (req, res) => {
 
 exports.getPendingWaiterRequests = async (req, res) => {
   try {
-    const requests = await WaiterRequest.find({ tenantId: req.user.id, status: 'Pending' })
+    const requests = await WaiterRequest.find({ tenantId: req.user._id, status: 'Pending' })
       .populate('tableId')
       .sort({ createdAt: -1 });
     res.json(requests);
@@ -595,14 +595,14 @@ exports.getPendingWaiterRequests = async (req, res) => {
 exports.resolveWaiterRequest = async (req, res) => {
   try {
     const request = await WaiterRequest.findOneAndUpdate(
-      { _id: req.params.id, tenantId: req.user.id },
+      { _id: req.params.id, tenantId: req.user._id },
       { status: 'Attended' },
       { new: true }
     );
     if (!request) return res.status(404).json({ message: 'Request not found' });
 
     const io = getIO();
-    const strUser = req.user.id.toString();
+    const strUser = req.user._id.toString();
     io.to(`tenant_${strUser}`).emit('waiter_request_resolved', request);
     io.emit('waiter_request_resolved', request);
 
@@ -616,12 +616,12 @@ exports.resolveWaiterRequest = async (req, res) => {
 exports.resolveAllWaiterRequests = async (req, res) => {
   try {
     await WaiterRequest.updateMany(
-      { tenantId: req.user.id, status: 'Pending' },
+      { tenantId: req.user._id, status: 'Pending' },
       { status: 'Attended' }
     );
 
     const io = getIO();
-    const strUser = req.user.id.toString();
+    const strUser = req.user._id.toString();
     io.to(`tenant_${strUser}`).emit('waiter_requests_cleared_all');
     io.emit('waiter_requests_cleared_all');
 
