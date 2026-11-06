@@ -271,6 +271,34 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  storeBanners: [
+    {
+      image: {
+        type: String,
+        default: '',
+      },
+      title: {
+        type: String,
+        default: '',
+      },
+      subtitle: {
+        type: String,
+        default: '',
+      },
+      tag: {
+        type: String,
+        default: '',
+      },
+      linkCategory: {
+        type: String,
+        default: '',
+      },
+      active: {
+        type: Boolean,
+        default: true,
+      },
+    },
+  ],
   isAdmin: {
     type: Boolean,
     default: false,

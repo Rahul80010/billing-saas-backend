@@ -105,6 +105,7 @@ exports.getPublicStore = async (req, res) => {
       storeAddress: user.storeAddress || user.businessAddress || '',
       storeOpeningHours: user.storeOpeningHours || '',
       logo: user.logo || '',
+      storeBanners: Array.isArray(user.storeBanners) ? user.storeBanners.filter(b => b.active !== false) : [],
       enableRestaurantMode: !!user.enableRestaurantMode,
       showStockQuantity: user.showStockQuantity !== false,
       showOutOfStockProducts: user.showOutOfStockProducts !== false,
@@ -390,6 +391,7 @@ exports.getStoreSettings = async (req, res) => {
       allowOnlineOrdering: user.allowOnlineOrdering !== false,
       minOrderAmount: user.minOrderAmount || 0,
       orderInstructions: user.orderInstructions || '',
+      storeBanners: Array.isArray(user.storeBanners) ? user.storeBanners : [],
     });
   } catch (error) {
     console.error('getStoreSettings error:', error);
@@ -423,6 +425,7 @@ exports.updateStoreSettings = async (req, res) => {
       allowOnlineOrdering,
       minOrderAmount,
       orderInstructions,
+      storeBanners,
     } = req.body;
 
     if (enableCustomerStockSharing !== undefined) user.enableCustomerStockSharing = Boolean(enableCustomerStockSharing);
@@ -436,6 +439,16 @@ exports.updateStoreSettings = async (req, res) => {
     if (allowOnlineOrdering !== undefined) user.allowOnlineOrdering = Boolean(allowOnlineOrdering);
     if (minOrderAmount !== undefined) user.minOrderAmount = Math.max(0, Number(minOrderAmount) || 0);
     if (orderInstructions !== undefined) user.orderInstructions = orderInstructions.trim();
+    if (Array.isArray(storeBanners)) {
+      user.storeBanners = storeBanners.map(b => ({
+        image: (b.image || '').trim(),
+        title: (b.title || '').trim(),
+        subtitle: (b.subtitle || '').trim(),
+        tag: (b.tag || '').trim(),
+        linkCategory: (b.linkCategory || '').trim(),
+        active: b.active !== false,
+      }));
+    }
 
     await user.save();
 
@@ -453,6 +466,7 @@ exports.updateStoreSettings = async (req, res) => {
       allowOnlineOrdering: user.allowOnlineOrdering,
       minOrderAmount: user.minOrderAmount,
       orderInstructions: user.orderInstructions,
+      storeBanners: user.storeBanners || [],
     });
   } catch (error) {
     console.error('updateStoreSettings error:', error);
