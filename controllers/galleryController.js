@@ -117,22 +117,46 @@ const getGalleryAssets = async (req, res) => {
       .limit(limit)
       .lean();
 
-    // If searching on first page, also fetch live web product photos
+    // If searching on first page, or if a category has fewer than 6 items, fetch live web product photos
     let liveAssets = [];
-    if (search && search.length >= 2 && page === 1) {
-      try {
-        liveAssets = await searchLiveProductImages(search, 18);
-      } catch (liveErr) {
-        console.warn('Live image search error:', liveErr.message);
+    if (page === 1) {
+      if (search && search.length >= 2) {
+        try {
+          liveAssets = await searchLiveProductImages(search, 18);
+        } catch (liveErr) {
+          console.warn('Live image search error:', liveErr.message);
+        }
+      } else if (category && category.toLowerCase() !== 'all' && assets.length < 6) {
+        try {
+          liveAssets = await searchLiveProductImages(category, 12);
+        } catch (catErr) {
+          console.warn('Category cloud fetch error:', catErr.message);
+        }
       }
     }
 
+    // Format liveAssets as proper GalleryAsset objects
+    const formattedLiveAssets = liveAssets.map((item, idx) => ({
+      _id: item.id || `live_${idx}_${Date.now()}`,
+      name: item.name,
+      categoryName: item.categoryName || category || 'General',
+      brand: item.brand || '',
+      imageUrl: item.imageUrl,
+      thumbnailUrl: item.thumbnailUrl || item.imageUrl,
+      status: 'ACTIVE',
+      isExternal: true,
+      usageCount: 0,
+    }));
+
+    // Merge liveAssets directly into assets so old frontend AND new frontend both display them!
+    const combinedAssets = [...assets, ...formattedLiveAssets];
+
     res.json({
-      assets,
-      liveAssets,
+      assets: combinedAssets,
+      liveAssets: formattedLiveAssets,
       page,
-      pages: Math.ceil(total / limit) || 1,
-      total,
+      pages: Math.ceil((total + formattedLiveAssets.length) / limit) || 1,
+      total: total + formattedLiveAssets.length,
     });
   } catch (error) {
     console.error('Failed to get gallery assets:', error);
@@ -180,6 +204,8 @@ const getGalleryCategories = async (req, res) => {
   }
 };
 
+const mongoose = require('mongoose');
+
 /**
  * @desc    Get single gallery asset by ID
  * @route   GET /api/gallery/:id
@@ -187,6 +213,9 @@ const getGalleryCategories = async (req, res) => {
  */
 const getGalleryAssetById = async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ message: 'Gallery asset not found' });
+    }
     const asset = await GalleryAsset.findById(req.params.id);
     if (!asset) {
       return res.status(404).json({ message: 'Gallery asset not found' });
@@ -204,6 +233,9 @@ const getGalleryAssetById = async (req, res) => {
  */
 const recordAssetUsage = async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.json({ message: 'External asset usage recorded', usageCount: 1 });
+    }
     const asset = await GalleryAsset.findByIdAndUpdate(
       req.params.id,
       { $inc: { usageCount: 1 } },
