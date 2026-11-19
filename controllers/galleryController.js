@@ -2,6 +2,8 @@ const GalleryAsset = require('../models/GalleryAsset');
 const GalleryCategory = require('../models/GalleryCategory');
 const Product = require('../models/Product');
 const ProductVariant = require('../models/ProductVariant');
+const axios = require('axios');
+const { searchLiveProductImages } = require('../services/productImageSearchService');
 const {
   uploadBufferToStorage,
   deleteImageFromStorage,
@@ -115,8 +117,19 @@ const getGalleryAssets = async (req, res) => {
       .limit(limit)
       .lean();
 
+    // If searching on first page, also fetch live web product photos
+    let liveAssets = [];
+    if (search && search.length >= 2 && page === 1) {
+      try {
+        liveAssets = await searchLiveProductImages(search, 18);
+      } catch (liveErr) {
+        console.warn('Live image search error:', liveErr.message);
+      }
+    }
+
     res.json({
       assets,
+      liveAssets,
       page,
       pages: Math.ceil(total / limit) || 1,
       total,
@@ -606,6 +619,168 @@ const deleteCategory = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Dedicated Live Search endpoint for product photos across Local Library & Web
+ * @route   GET /api/gallery/live-search
+ * @access  Private / Optional Protect
+ */
+const liveSearchGallery = async (req, res) => {
+  try {
+    const q = (req.query.q || req.query.search || '').trim();
+    const category = (req.query.category || '').trim();
+    const limit = Math.min(parseInt(req.query.limit) || 24, 40);
+
+    if (!q) {
+      return res.json({ localAssets: [], liveAssets: [], total: 0 });
+    }
+
+    // 1. Search local MongoDB
+    const regex = new RegExp(escapeRegex(q), 'i');
+    const localQuery = {
+      status: 'ACTIVE',
+      $or: [
+        { name: regex },
+        { brand: regex },
+        { categoryName: regex },
+        { tags: regex },
+        { description: regex },
+      ],
+    };
+    if (category && category.toLowerCase() !== 'all') {
+      localQuery.categoryName = { $regex: new RegExp(`^${escapeRegex(category)}$`, 'i') };
+    }
+
+    const localAssets = await GalleryAsset.find(localQuery)
+      .sort({ usageCount: -1, createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    // 2. Search Live Web Images
+    let liveAssets = [];
+    try {
+      liveAssets = await searchLiveProductImages(q, limit);
+    } catch (liveErr) {
+      console.warn('Live image search error:', liveErr.message);
+    }
+
+    res.json({
+      localAssets: localAssets.map(a => ({ ...a, isLocal: true })),
+      liveAssets,
+      total: localAssets.length + liveAssets.length,
+    });
+  } catch (err) {
+    console.error('Failed to perform live search:', err);
+    res.status(500).json({ message: 'Live search failed', error: err.message });
+  }
+};
+
+/**
+ * @desc    Import external web asset into Cloudflare R2 & Mohuri Gallery library
+ * @route   POST /api/gallery/import-external
+ * @access  Private / Optional Protect
+ */
+const importExternalAsset = async (req, res) => {
+  try {
+    const { imageUrl, name, categoryName, brand } = req.body;
+    if (!imageUrl) {
+      return res.status(400).json({ message: 'imageUrl is required' });
+    }
+
+    // Check if an asset with this exact imageUrl is already imported
+    const existing = await GalleryAsset.findOne({
+      $or: [
+        { imageUrl },
+        { 'metadata.sourceImageUrl': imageUrl },
+      ],
+      status: 'ACTIVE'
+    });
+
+    if (existing) {
+      existing.usageCount = (existing.usageCount || 0) + 1;
+      await existing.save();
+      return res.json({ asset: existing });
+    }
+
+    // 1. Download image from external URL
+    let buffer = null;
+    let mimeType = 'image/jpeg';
+    try {
+      const resp = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        },
+        timeout: 10000,
+      });
+      buffer = Buffer.from(resp.data);
+      mimeType = resp.headers['content-type'] || 'image/jpeg';
+      if (mimeType.includes(';')) mimeType = mimeType.split(';')[0];
+    } catch (fetchErr) {
+      console.warn('Failed to download image buffer from external URL:', fetchErr.message);
+      // Fallback: Return raw external URL asset object so merchant is NOT blocked
+      return res.json({
+        asset: {
+          _id: `temp_${Date.now()}`,
+          name: (name || 'Product Photo').trim(),
+          categoryName: categoryName || 'General',
+          brand: (brand || '').trim(),
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          imageSource: 'WEB_EXTERNAL',
+        }
+      });
+    }
+
+    // 2. Upload to Cloudflare R2
+    const cleanCat = (categoryName || 'general').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+    const uuid = generateUuidFilename(ext);
+    const origKey = getGalleryKeyPath(cleanCat, uuid, false);
+    const thumbKey = getGalleryKeyPath(cleanCat, uuid, true);
+
+    const [uploadedUrl, uploadedThumbUrl] = await Promise.all([
+      uploadBufferToStorage(buffer, origKey, mimeType),
+      uploadBufferToStorage(buffer, thumbKey, mimeType),
+    ]);
+
+    // 3. Save to GalleryAsset collection
+    const cleanName = (name || 'Product Photo').trim();
+    const tags = Array.from(new Set([
+      ...cleanName.toLowerCase().split(/\s+/),
+      (brand || '').toLowerCase(),
+      (categoryName || '').toLowerCase(),
+    ])).filter(Boolean);
+
+    const asset = await GalleryAsset.create({
+      name: cleanName,
+      brand: (brand || '').trim(),
+      categoryName: categoryName || 'General',
+      tags,
+      imageUrl: uploadedUrl,
+      thumbnailUrl: uploadedThumbUrl,
+      r2Key: origKey,
+      r2ThumbKey: thumbKey,
+      mimeType,
+      fileSize: buffer.length,
+      status: 'ACTIVE',
+      usageCount: 1,
+      uploadedBy: req.user ? req.user._id : null,
+      metadata: {
+        sourceImageUrl: imageUrl,
+      }
+    });
+
+    res.json({
+      message: 'Asset imported to Cloudflare R2 successfully',
+      asset,
+    });
+  } catch (err) {
+    console.error('Failed to import external asset:', err);
+    res.status(500).json({ message: 'Failed to import asset', error: err.message });
+  }
+};
+
 module.exports = {
   getGalleryAssets,
   getGalleryCategories,
@@ -619,4 +794,6 @@ module.exports = {
   createCategory,
   updateCategory,
   deleteCategory,
+  liveSearchGallery,
+  importExternalAsset,
 };

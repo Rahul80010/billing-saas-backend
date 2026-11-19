@@ -14,6 +14,8 @@ const {
   createCategory,
   updateCategory,
   deleteCategory,
+  liveSearchGallery,
+  importExternalAsset,
 } = require('../controllers/galleryController');
 
 // Admin-Only Routes (Must be declared before /:id)
@@ -31,6 +33,8 @@ router.delete('/admin/categories/:id', protect, admin, deleteCategory);
 
 // Merchant, Mobile App & Public Gallery Browse Routes (Accessible with or without token)
 router.get('/', optionalProtect, getGalleryAssets);
+router.get('/live-search', optionalProtect, liveSearchGallery);
+router.post('/import-external', optionalProtect, importExternalAsset);
 router.get('/categories', optionalProtect, getGalleryCategories);
 router.post('/usage/:id', optionalProtect, recordAssetUsage);
 router.get('/:id', optionalProtect, getGalleryAssetById);
