@@ -4,6 +4,57 @@ const axios = require('axios');
 const searchCache = new Map();
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
+// Strict filter terms to eliminate people, humans, selfies, reviews, lifestyle shots
+const JUNK_TERMS = [
+  'person', 'people', 'man', 'woman', 'men', 'women', 'girl', 'boy', 'human',
+  'model', 'wearing', 'face', 'portrait', 'selfie', 'lifestyle', 'actor', 'actress',
+  'founder', 'ceo', 'inventor', 'biography', 'ear', 'hands', 'holding', 'unboxing',
+  'reaction', 'review', 'vlog', 'youtube', 'ytimg', 'thumbnail', 'meme', 'lady',
+  'guy', 'kid', 'child', 'crowd', 'smile', 'posing', 'influencer'
+];
+
+/**
+ * Check if an image title or URL contains human/lifestyle/junk terms
+ */
+const isJunkImage = (title, url) => {
+  const full = `${title || ''} ${url || ''}`.toLowerCase();
+  for (const term of JUNK_TERMS) {
+    const reg = new RegExp(`(^|[^a-z0-9])${term}([^a-z0-9]|$)`, 'i');
+    if (reg.test(full) || url.toLowerCase().includes(term)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Calculate relevance score so that exact product matches appear at the top
+ */
+const calculateScore = (title, url, searchWords) => {
+  const lowerTitle = (title || '').toLowerCase();
+  const lowerUrl = (url || '').toLowerCase();
+  let score = 0;
+
+  for (const word of searchWords) {
+    if (word.length <= 1) continue;
+    if (lowerTitle.includes(word)) {
+      score += 25;
+    } else if (lowerUrl.includes(word)) {
+      score += 5;
+    }
+  }
+
+  // Bonus for authentic e-commerce and catalog packaging sources
+  const ecomBonus = ['amazon', 'flipkart', 'official', 'product', 'pack', 'box', 'specs', 'store', 'shop', 'oppo', 'samsung', 'apple'];
+  for (const b of ecomBonus) {
+    if (lowerTitle.includes(b) || lowerUrl.includes(b)) {
+      score += 5;
+    }
+  }
+
+  return score;
+};
+
 /**
  * Clean and normalize search query
  */
@@ -13,22 +64,24 @@ const cleanQuery = (q) => {
 
 /**
  * Fetch product images from Bing Images Async engine
- * Free, fast, returns real-world product packaging photos (Amazon, Flipkart, IndiaMART, Brand sites)
+ * Uses targeted e-commerce hints and negative filters to ensure ONLY clean product photos
  */
 const searchBingImages = async (query, limit = 18) => {
   try {
     const cleaned = cleanQuery(query);
     if (!cleaned) return [];
 
-    // Search query with hints for product photography
-    const searchQuery = `${cleaned} product pack white background`;
+    const searchWords = cleaned.toLowerCase().split(/\s+/).filter(Boolean);
+
+    // Formulate search query with negative filters to exclude people and lifestyle photos
+    const searchQuery = `${searchWords.join(' ')} product box pack isolated ecommerce -person -man -woman -men -women -model -face -wearing -people -lifestyle`;
 
     const url = 'https://www.bing.com/images/async';
     const response = await axios.get(url, {
       params: {
         q: searchQuery,
         first: 1,
-        count: Math.min(limit * 2, 40),
+        count: Math.min(limit * 2, 45),
         mmasync: 1
       },
       headers: {
@@ -39,36 +92,45 @@ const searchBingImages = async (query, limit = 18) => {
       timeout: 7000
     });
 
-    const results = [];
+    const candidates = [];
     const mRegex = /m="({[^"]+})"/g;
     let match;
 
-    while ((match = mRegex.exec(response.data)) !== null && results.length < limit) {
+    while ((match = mRegex.exec(response.data)) !== null) {
       const raw = match[1].replace(/&quot;/g, '"');
       try {
         const parsed = JSON.parse(raw);
         const imageUrl = parsed.murl;
         const thumbUrl = parsed.turl || parsed.murl;
-        const title = (parsed.t || parsed.desc || parsed.displayTitle || cleaned).replace(/<[^>]+>/g, '').trim();
+        const rawTitle = (parsed.t || parsed.desc || parsed.displayTitle || cleaned).replace(/<[^>]+>/g, '').trim();
 
-        if (imageUrl && imageUrl.startsWith('http')) {
-          results.push({
-            id: `web_${Buffer.from(imageUrl).toString('base64').slice(0, 16)}_${results.length}`,
-            name: title.length > 55 ? title.slice(0, 52) + '...' : title,
-            fullName: title,
-            imageUrl,
-            thumbnailUrl: thumbUrl,
-            source: parsed.purl || '',
-            categoryName: 'Web Search',
-            isExternal: true,
-          });
-        }
+        if (!imageUrl || !imageUrl.startsWith('http')) continue;
+
+        // Skip any image matching human/lifestyle/junk terms
+        if (isJunkImage(rawTitle, imageUrl)) continue;
+
+        const score = calculateScore(rawTitle, imageUrl, searchWords);
+
+        candidates.push({
+          id: `web_${Buffer.from(imageUrl).toString('base64').slice(0, 16)}_${candidates.length}`,
+          name: rawTitle.length > 60 ? rawTitle.slice(0, 57) + '...' : rawTitle,
+          fullName: rawTitle,
+          imageUrl,
+          thumbnailUrl: thumbUrl,
+          source: parsed.purl || '',
+          categoryName: 'Web Search',
+          isExternal: true,
+          score,
+        });
       } catch (_) {
         // Skip malformed items
       }
     }
 
-    return results;
+    // Sort by relevance score descending so exact product matches are #1
+    candidates.sort((a, b) => b.score - a.score);
+
+    return candidates.slice(0, limit);
   } catch (error) {
     console.warn('[ProductImageSearch] Bing search failed:', error.message);
     return [];
@@ -113,6 +175,7 @@ const searchOpenFoodFacts = async (query, limit = 8) => {
           thumbnailUrl: thumb,
           categoryName: 'Grocery & Staples',
           isExternal: true,
+          score: 50,
         });
       }
     });
@@ -125,60 +188,8 @@ const searchOpenFoodFacts = async (query, limit = 8) => {
 };
 
 /**
- * Fallback: Search Wikimedia Commons for Brands & General Products
- */
-const searchWikimedia = async (query, limit = 6) => {
-  try {
-    const cleaned = cleanQuery(query);
-    if (!cleaned) return [];
-
-    const url = 'https://en.wikipedia.org/w/api.php';
-    const response = await axios.get(url, {
-      params: {
-        action: 'query',
-        generator: 'search',
-        gsrsearch: cleaned,
-        gsrlimit: limit,
-        prop: 'pageimages|pageterms',
-        piprop: 'thumbnail|original',
-        pithumbsize: 600,
-        format: 'json',
-      },
-      headers: {
-        'User-Agent': 'MohuriBillingSaaS/1.0 (support@mohuri.detalogy.com)',
-      },
-      timeout: 5000,
-    });
-
-    const pages = response.data?.query?.pages || {};
-    const results = [];
-
-    for (const pageId of Object.keys(pages)) {
-      const p = pages[pageId];
-      const img = p.thumbnail?.source || p.original?.source;
-      if (img && img.startsWith('http')) {
-        results.push({
-          id: `wiki_${pageId}`,
-          name: p.title,
-          fullName: p.title,
-          imageUrl: img,
-          thumbnailUrl: p.thumbnail?.source || img,
-          categoryName: 'General',
-          isExternal: true,
-        });
-      }
-    }
-
-    return results;
-  } catch (error) {
-    console.warn('[ProductImageSearch] Wikimedia fallback failed:', error.message);
-    return [];
-  }
-};
-
-/**
  * Main Live Search function
- * Queries live product image engines with caching and multi-tier fallbacks
+ * Queries live product image engines with caching, junk filtering, and relevance ranking
  */
 const searchLiveProductImages = async (query, limit = 18) => {
   const cleanTerm = cleanQuery(query);
@@ -190,19 +201,13 @@ const searchLiveProductImages = async (query, limit = 18) => {
     return cached.data;
   }
 
-  // 1. Try Bing Async Image Search first (High accuracy product packaging)
+  // 1. Search Bing with strict e-commerce filters and human/lifestyle exclusions
   let results = await searchBingImages(cleanTerm, limit);
 
-  // 2. If Bing returned fewer than 4 results, complement with Open Food Facts
+  // 2. If fewer than 4 results, complement with Open Food Facts
   if (results.length < 4) {
     const offResults = await searchOpenFoodFacts(cleanTerm, limit - results.length);
     results = [...results, ...offResults];
-  }
-
-  // 3. If still low, complement with Wikimedia
-  if (results.length < 3) {
-    const wikiResults = await searchWikimedia(cleanTerm, limit - results.length);
-    results = [...results, ...wikiResults];
   }
 
   // Cache results
@@ -212,7 +217,6 @@ const searchLiveProductImages = async (query, limit = 18) => {
       data: results,
     });
 
-    // Prune cache if it gets too large (> 500 entries)
     if (searchCache.size > 500) {
       const oldestKey = searchCache.keys().next().value;
       searchCache.delete(oldestKey);

@@ -99,15 +99,31 @@ const getGalleryAssets = async (req, res) => {
     }
 
     if (search) {
-      const cleanTerm = escapeRegex(search);
-      const regex = new RegExp(cleanTerm, 'i');
-      query.$or = [
-        { name: regex },
-        { brand: regex },
-        { categoryName: regex },
-        { tags: regex },
-        { description: regex },
-      ];
+      const terms = search.trim().split(/\s+/).filter(Boolean);
+      if (terms.length === 1) {
+        const regex = new RegExp(escapeRegex(terms[0]), 'i');
+        query.$or = [
+          { name: regex },
+          { brand: regex },
+          { categoryName: regex },
+          { tags: regex },
+          { description: regex },
+        ];
+      } else if (terms.length > 1) {
+        // Multi-word search: all terms must match across the product document
+        query.$and = terms.map(term => {
+          const regex = new RegExp(escapeRegex(term), 'i');
+          return {
+            $or: [
+              { name: regex },
+              { brand: regex },
+              { categoryName: regex },
+              { tags: regex },
+              { description: regex },
+            ]
+          };
+        });
+      }
     }
 
     const total = await GalleryAsset.countDocuments(query);
@@ -666,18 +682,34 @@ const liveSearchGallery = async (req, res) => {
       return res.json({ localAssets: [], liveAssets: [], total: 0 });
     }
 
-    // 1. Search local MongoDB
-    const regex = new RegExp(escapeRegex(q), 'i');
-    const localQuery = {
-      status: 'ACTIVE',
-      $or: [
+    // 1. Search local MongoDB with multi-word flexible matching
+    const terms = q.split(/\s+/).filter(Boolean);
+    const localQuery = { status: 'ACTIVE' };
+
+    if (terms.length === 1) {
+      const regex = new RegExp(escapeRegex(terms[0]), 'i');
+      localQuery.$or = [
         { name: regex },
         { brand: regex },
         { categoryName: regex },
         { tags: regex },
         { description: regex },
-      ],
-    };
+      ];
+    } else if (terms.length > 1) {
+      localQuery.$and = terms.map(term => {
+        const regex = new RegExp(escapeRegex(term), 'i');
+        return {
+          $or: [
+            { name: regex },
+            { brand: regex },
+            { categoryName: regex },
+            { tags: regex },
+            { description: regex },
+          ]
+        };
+      });
+    }
+
     if (category && category.toLowerCase() !== 'all') {
       localQuery.categoryName = { $regex: new RegExp(`^${escapeRegex(category)}$`, 'i') };
     }
