@@ -10,7 +10,8 @@ const JUNK_TERMS = [
   'model', 'wearing', 'face', 'portrait', 'selfie', 'lifestyle', 'actor', 'actress',
   'founder', 'ceo', 'inventor', 'biography', 'ear', 'hands', 'holding', 'unboxing',
   'reaction', 'review', 'vlog', 'youtube', 'ytimg', 'thumbnail', 'meme', 'lady',
-  'guy', 'kid', 'child', 'crowd', 'smile', 'posing', 'influencer'
+  'guy', 'kid', 'child', 'crowd', 'smile', 'posing', 'influencer', 'quote', 'bible',
+  'verse', 'wallpaper', 'art print', 'printable'
 ];
 
 /**
@@ -45,7 +46,7 @@ const calculateScore = (title, url, searchWords) => {
   }
 
   // Bonus for authentic e-commerce and catalog packaging sources
-  const ecomBonus = ['amazon', 'flipkart', 'official', 'product', 'pack', 'box', 'specs', 'store', 'shop', 'oppo', 'samsung', 'apple'];
+  const ecomBonus = ['amazon', 'flipkart', 'official', 'product', 'pack', 'box', 'specs', 'store', 'shop', 'croma', 'reliancedigital', 'oppo', 'realme', 'samsung', 'apple', 'boat'];
   for (const b of ecomBonus) {
     if (lowerTitle.includes(b) || lowerUrl.includes(b)) {
       score += 5;
@@ -63,8 +64,8 @@ const cleanQuery = (q) => {
 };
 
 /**
- * Fetch product images from Bing Images Async engine
- * Uses targeted e-commerce hints and negative filters to ensure ONLY clean product photos
+ * Fetch product images from Bing Images Search
+ * Uses standard web search endpoint with form=HDRSC2 for high accuracy e-commerce results
  */
 const searchBingImages = async (query, limit = 18) => {
   try {
@@ -72,21 +73,18 @@ const searchBingImages = async (query, limit = 18) => {
     if (!cleaned) return [];
 
     const searchWords = cleaned.toLowerCase().split(/\s+/).filter(Boolean);
+    const searchQuery = `${searchWords.join(' ')} product`;
 
-    // Formulate search query with negative filters to exclude people and lifestyle photos
-    const searchQuery = `${searchWords.join(' ')} product box pack isolated ecommerce -person -man -woman -men -women -model -face -wearing -people -lifestyle`;
-
-    const url = 'https://www.bing.com/images/async';
+    const url = 'https://www.bing.com/images/search';
     const response = await axios.get(url, {
       params: {
         q: searchQuery,
+        form: 'HDRSC2',
         first: 1,
-        count: Math.min(limit * 2, 45),
-        mmasync: 1
       },
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-IN,en-US;q=0.9,en;q=0.8',
       },
       timeout: 7000
@@ -201,7 +199,7 @@ const searchLiveProductImages = async (query, limit = 18) => {
     return cached.data;
   }
 
-  // 1. Search Bing with strict e-commerce filters and human/lifestyle exclusions
+  // 1. Search Bing images/search endpoint with strict e-commerce filters and human/lifestyle exclusions
   let results = await searchBingImages(cleanTerm, limit);
 
   // 2. If fewer than 4 results, complement with Open Food Facts
