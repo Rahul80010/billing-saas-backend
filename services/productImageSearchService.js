@@ -4,14 +4,14 @@ const axios = require('axios');
 const searchCache = new Map();
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
-// Strict filter terms to eliminate people, humans, selfies, reviews, lifestyle shots
+// Strict filter terms to eliminate people, humans, selfies, reviews, lifestyle shots, quotes, memes
 const JUNK_TERMS = [
   'person', 'people', 'man', 'woman', 'men', 'women', 'girl', 'boy', 'human',
   'model', 'wearing', 'face', 'portrait', 'selfie', 'lifestyle', 'actor', 'actress',
   'founder', 'ceo', 'inventor', 'biography', 'ear', 'hands', 'holding', 'unboxing',
   'reaction', 'review', 'vlog', 'youtube', 'ytimg', 'thumbnail', 'meme', 'lady',
   'guy', 'kid', 'child', 'crowd', 'smile', 'posing', 'influencer', 'quote', 'bible',
-  'verse', 'wallpaper', 'art print', 'printable'
+  'verse', 'wallpaper', 'art print', 'printable', 'proverbs'
 ];
 
 /**
@@ -35,18 +35,26 @@ const calculateScore = (title, url, searchWords) => {
   const lowerTitle = (title || '').toLowerCase();
   const lowerUrl = (url || '').toLowerCase();
   let score = 0;
+  let matchedWordCount = 0;
 
   for (const word of searchWords) {
     if (word.length <= 1) continue;
     if (lowerTitle.includes(word)) {
-      score += 25;
+      score += 30;
+      matchedWordCount++;
     } else if (lowerUrl.includes(word)) {
-      score += 5;
+      score += 10;
+      matchedWordCount++;
     }
   }
 
-  // Bonus for authentic e-commerce and catalog packaging sources
-  const ecomBonus = ['amazon', 'flipkart', 'official', 'product', 'pack', 'box', 'specs', 'store', 'shop', 'croma', 'reliancedigital', 'oppo', 'realme', 'samsung', 'apple', 'boat'];
+  // If none of the search words match, score remains 0
+  if (matchedWordCount === 0) {
+    return 0;
+  }
+
+  // Bonus for authentic Indian e-commerce and catalog packaging sources
+  const ecomBonus = ['amazon', 'flipkart', 'blinkit', 'zepto', 'instamart', 'grofers', 'croma', 'reliancedigital', 'imimg', 'indiamart', 'official', 'product', 'pack', 'box', 'specs', 'store', 'shop'];
   for (const b of ecomBonus) {
     if (lowerTitle.includes(b) || lowerUrl.includes(b)) {
       score += 5;
@@ -64,8 +72,7 @@ const cleanQuery = (q) => {
 };
 
 /**
- * Fetch product images from Bing Images Search
- * Uses standard web search endpoint with form=HDRSC2 for high accuracy e-commerce results
+ * Fetch product images from Bing Images Search localized for Indian E-Commerce
  */
 const searchBingImages = async (query, limit = 18) => {
   try {
@@ -73,19 +80,22 @@ const searchBingImages = async (query, limit = 18) => {
     if (!cleaned) return [];
 
     const searchWords = cleaned.toLowerCase().split(/\s+/).filter(Boolean);
-    const searchQuery = `${searchWords.join(' ')} product`;
+    const searchQuery = `${searchWords.join(' ')} India product`;
 
     const url = 'https://www.bing.com/images/search';
     const response = await axios.get(url, {
       params: {
         q: searchQuery,
         form: 'HDRSC2',
+        cc: 'IN',
+        setlang: 'en-US',
         first: 1,
       },
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-IN,en-US;q=0.9,en;q=0.8',
+        'Cookie': 'SRCHHPGUSR=ADLT=OFF&NRSLT=50; _EDGE_S=mkt=en-in; MUIDB=1'
       },
       timeout: 7000
     });
@@ -108,6 +118,9 @@ const searchBingImages = async (query, limit = 18) => {
         if (isJunkImage(rawTitle, imageUrl)) continue;
 
         const score = calculateScore(rawTitle, imageUrl, searchWords);
+
+        // MUST have matched at least one of the user's search words
+        if (score < 20) continue;
 
         candidates.push({
           id: `web_${Buffer.from(imageUrl).toString('base64').slice(0, 16)}_${candidates.length}`,
@@ -199,7 +212,7 @@ const searchLiveProductImages = async (query, limit = 18) => {
     return cached.data;
   }
 
-  // 1. Search Bing images/search endpoint with strict e-commerce filters and human/lifestyle exclusions
+  // 1. Search Bing images/search endpoint localized for Indian e-commerce
   let results = await searchBingImages(cleanTerm, limit);
 
   // 2. If fewer than 4 results, complement with Open Food Facts
